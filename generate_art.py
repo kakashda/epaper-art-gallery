@@ -4,7 +4,6 @@ import random
 import re
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -19,7 +18,7 @@ OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
 LAST_UPDATE_FILE = "last_update.txt"
 
-# Тот же источник: Art Institute of Chicago
+# Art Institute of Chicago
 AIC_API = "https://api.artic.edu/api/v1/artworks"
 AIC_IIIF = "https://www.artic.edu/iiif/2/{image_id}/full/843,/0/default.jpg"
 # ================================================
@@ -29,7 +28,7 @@ HEADERS = {
 }
 
 def clean_text(value, max_length):
-    """Убирает $, лишние пробелы и переносы; ограничивает длину текста."""
+    """Убирает лишние пробелы и переносы; ограничивает длину текста."""
     text = str(value or "")
     text = text.replace("$", "")
     text = re.sub(r"\s+", " ", text).strip()
@@ -40,8 +39,12 @@ def clean_text(value, max_length):
     return text
 
 def short_artist(value):
-    """У Art Institute artist_display бывает многострочным — оставляем первую строку."""
-    lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]
+    """У artist_display может быть несколько строк — берём первую."""
+    lines = [
+        line.strip()
+        for line in str(value or "").splitlines()
+        if line.strip()
+    ]
     return clean_text(lines[0] if lines else "Unknown artist", 42)
 
 def should_update():
@@ -63,12 +66,14 @@ def should_update():
 
 def get_random_artwork():
     """Получает случайную работу с изображением из каталога Art Institute of Chicago."""
+    # ВАЖНО: total_pages считаем с тем же limit=100, что и в основном запросе,
+    # иначе номер случайной страницы выходит далеко за пределы реального каталога.
     first_response = requests.get(
         AIC_API,
         params={
             "page": 1,
-            "limit": 1,
-            "fields": "id"
+            "limit": 100,
+            "fields": "id",
         },
         headers=HEADERS,
         timeout=20,
@@ -78,7 +83,7 @@ def get_random_artwork():
     pagination = first_response.json().get("pagination", {})
     total_pages = int(pagination.get("total_pages", 1))
 
-    # Несколько попыток — некоторые записи могут не иметь пригодного image_id.
+    # Некоторые записи не имеют изображения: пробуем до 12 страниц.
     for _ in range(12):
         page = random.randint(1, max(1, total_pages))
 
@@ -87,7 +92,7 @@ def get_random_artwork():
             params={
                 "page": page,
                 "limit": 100,
-                "fields": "id,title,artist_display,date_display,image_id"
+                "fields": "id,title,artist_display,date_display,image_id",
             },
             headers=HEADERS,
             timeout=20,
@@ -95,20 +100,25 @@ def get_random_artwork():
         response.raise_for_status()
 
         candidates = [
-            item for item in response.json().get("data", [])
+            item
+            for item in response.json().get("data", [])
             if item.get("image_id")
         ]
 
         if candidates:
             return random.choice(candidates)
 
-    raise RuntimeError("Не удалось получить запись с изображением из каталога.")
+    raise RuntimeError(
+        "Не удалось получить запись с изображением из каталога."
+    )
 
 def get_font(size, bold=False):
     candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        if bold else
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            if bold
+            else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        ),
         "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
     ]
 
@@ -124,7 +134,6 @@ def create_image(artwork):
     image_id = artwork["image_id"]
     image_url = AIC_IIIF.format(image_id=image_id)
 
-    # Оригинал скачивается только в RAM: временного файла на GitHub не создаётся.
     image_response = requests.get(
         image_url,
         headers=HEADERS,
@@ -132,10 +141,11 @@ def create_image(artwork):
     )
     image_response.raise_for_status()
 
-    source = Image.open(io.BytesIO(image_response.content)).convert("RGB")
+    source = Image.open(
+        io.BytesIO(image_response.content)
+    ).convert("RGB")
 
-    # Картина заполняет весь экран 800×480.
-    # Края могут минимально обрезаться, чтобы не было белых полей.
+    # Заполняет весь экран 800x480; края могут немного обрезаться.
     canvas = ImageOps.fit(
         source,
         (OUTPUT_WIDTH, OUTPUT_HEIGHT),
@@ -146,18 +156,17 @@ def create_image(artwork):
     title = clean_text(artwork.get("title") or "Untitled", 48)
     artist = short_artist(artwork.get("artist_display"))
     year = clean_text(artwork.get("date_display"), 18)
-
     meta = f"{artist} · {year}" if year else artist
 
     overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
     title_font = get_font(17, bold=True)
-    meta_font = get_font(13, bold=False)
+    meta_font = get_font(13)
 
     padding_x = 10
-    padding_y = 7
     margin = 10
+    box_height = 48
 
     title_box = draw.textbbox((0, 0), title, font=title_font)
     meta_box = draw.textbbox((0, 0), meta, font=meta_font)
@@ -166,8 +175,10 @@ def create_image(artwork):
         title_box[2] - title_box[0],
         meta_box[2] - meta_box[0],
     )
-    box_width = min(text_width + padding_x * 2, int(OUTPUT_WIDTH * 0.62))
-    box_height = 48
+    box_width = min(
+        text_width + padding_x * 2,
+        int(OUTPUT_WIDTH * 0.62),
+    )
 
     x1 = margin
     y1 = OUTPUT_HEIGHT - box_height - margin
