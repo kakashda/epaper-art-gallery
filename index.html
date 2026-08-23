@@ -1,105 +1,26 @@
-<!DOCTYPE html>
-<html lang="ru">
+<!doctype html>
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Art Gallery</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: 100vw;
-      height: 100vh;
-      background-color: #000000;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background: #fff;
     }
-    #art-image {
+    img {
+      display: block;
       width: 100vw;
       height: 100vh;
       object-fit: contain;
-      display: block;
-      background-color: #000000;
-    }
-    #badge {
-      position: absolute;
-      bottom: 12px;
-      left: 12px;
-      max-width: 60%;
-      background: rgba(0, 0, 0, 0.75);
-      color: #ffffff;
-      padding: 6px 10px;
-      border-radius: 4px;
-      border-left: 3px solid #ffffff;
-      backdrop-filter: blur(4px);
-    }
-    #title {
-      font-size: 15px;
-      font-weight: bold;
-      line-height: 1.2;
-      margin-bottom: 2px;
-    }
-    #meta {
-      font-size: 12px;
-      color: #cccccc;
-      line-height: 1.2;
     }
   </style>
 </head>
 <body>
-  <img id="art-image" alt="Artwork" />
-  <div id="badge" style="display: none;">
-    <div id="title"></div>
-    <div id="meta"></div>
-  </div>
-
-  <script>
-    // Пул проверенных ID знаменитых картин из Met Museum с открытыми правами
-    const curatedIds = [
-      436535, 436528, 436532, 436534, 436533, 435882, 437980, 437984,
-      437986, 435848, 435851, 435853, 435852, 436105, 436101, 437053,
-      437056, 437058, 437059, 436839, 436838, 436840, 437372, 437375,
-      436524, 436529, 436530, 436531, 459123, 459106, 459108, 459110,
-      435621, 435641, 435702, 435722, 437658, 437654, 436575, 436573
-    ];
-
-    async function loadMetArt() {
-      const titleEl = document.getElementById('title');
-      const metaEl = document.getElementById('meta');
-      const badgeEl = document.getElementById('badge');
-      const imgEl = document.getElementById('art-image');
-
-      try {
-        const randomId = curatedIds[Math.floor(Math.random() * curatedIds.length)];
-        const resp = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${randomId}`);
-        const data = await resp.json();
-
-        const imgUrl = data.primaryImageSmall || data.primaryImage;
-        if (!imgUrl) throw new Error('No image URL');
-
-        titleEl.textContent = data.title || 'Artwork';
-        const artist = data.artistDisplayName || 'Unknown Artist';
-        const date = data.objectDate ? ` (${data.objectDate})` : '';
-        metaEl.textContent = `$${artist}$${date}`;
-
-        imgEl.onload = () => {
-          badgeEl.style.display = 'block';
-        };
-        imgEl.src = imgUrl;
-
-      } catch (e) {
-        // Надежный fallback
-        imgEl.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/800px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg';
-        titleEl.textContent = 'Звёздная ночь';
-        metaEl.textContent = 'Винсент ван Гог (1889)';
-        badgeEl.style.display = 'block';
-      }
-    }
-
-    loadMetArt();
-  </script>
+  <img src="current.jpg" alt="Artwork">
 </body>
 </html>
