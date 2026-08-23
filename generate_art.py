@@ -20,22 +20,298 @@ OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
 LAST_UPDATE_FILE = "last_update.txt"
 
-# The Metropolitan Museum of Art Collection API
-MET_SEARCH_URL = "https://collectionapi.metmuseum.org/public/collection/v1/search"
-MET_OBJECT_URL = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{object_id}"
+# Сетевые параметры
+HTTP_TIMEOUT = 30
+MAX_RETRIES = 3          # число повторов на один HTTP-запрос
+RETRY_BACKOFF = 2.0      # базовая задержка между повторами (секунды)
+MAX_CANDIDATES = 25      # сколько объектов пробуем у одного источника
+MIN_IMAGE_BYTES = 5000   # меньший размер почти наверняка означает страницу-ошибку
 # ================================================
+
+# Реалистичный браузерный User-Agent помогает обойти простые анти-бот проверки
+# и корректно пройти content-negotiation на CDN музеев.
+BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
 
 # Заголовки для API-запросов (JSON)
 API_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; epaper-art-gallery/1.0; +https://github.com/kakashda/epaper-art-gallery)",
+    "User-Agent": BROWSER_UA,
     "Accept": "application/json",
 }
 
-# Заголовки для скачивания изображений (image/*)
+# Заголовки для скачивания изображений.
+# Явно перечисляем конкретные типы, чтобы избежать 406 Not Acceptable
+# на некоторых CDN-узлах, которые не любят обобщённый "image/*".
 IMG_HEADERS = {
-    "User-Agent": API_HEADERS["User-Agent"],
-    "Accept": "image/*,*/*",
+    "User-Agent": BROWSER_UA,
+    "Accept": "image/avif,image/webp,image/apng,image/jpeg,image/png,image/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+# ==================================================================
+#                         HTTP-хелперы
+# ==================================================================
+
+def _request_with_retries(url, *, params=None, headers=None, label="request"):
+    """GET с повторами и экспоненциальной задержкой.
+
+    Возвращает объект Response с кодом 200 либо бросает исключение
+    после исчерпания попыток. Повторяем только временные/анти-бот
+    ошибки (403, 406, 408, 429, 5xx) и сетевые сбои.
+    """
+    retryable_status = {403, 406, 408, 425, 429, 500, 502, 503, 504}
+    last_error = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=HTTP_TIMEOUT,
+            )
+            status = response.status_code
+            print(f"[{label}] GET {response.url} -> HTTP {status} (попытка {attempt})")
+
+            if status == 200:
+                return response
+
+            last_error = requests.HTTPError(
+                f"HTTP {status} for url: {response.url}", response=response
+            )
+
+            if status not in retryable_status:
+                # Не временная ошибка — повторять смысла нет.
+                print(f"[{label}] Неповторяемый статус {status}, прекращаем попытки.")
+                raise last_error
+
+            print(f"[{label}] Тело ответа (первые 200 символов): {response.text[:200]!r}")
+
+        except requests.RequestException as error:
+            last_error = error
+            print(f"[{label}] Сетевая ошибка на попытке {attempt}: {error}")
+
+        if attempt < MAX_RETRIES:
+            delay = RETRY_BACKOFF * attempt + random.uniform(0, 0.8)
+            print(f"[{label}] Ждём {delay:.1f}s перед повтором...")
+            time.sleep(delay)
+
+    raise last_error if last_error else RuntimeError(f"[{label}] Запрос не удался.")
+
+
+def fetch_json(url, params=None, label="json"):
+    """Загружает и парсит JSON с повторами."""
+    response = _request_with_retries(url, params=params, headers=API_HEADERS, label=label)
+    try:
+        return response.json()
+    except ValueError as error:
+        print(f"[{label}] Ответ не является валидным JSON: {response.text[:300]!r}")
+        raise RuntimeError(f"Некорректный JSON от API: {error}") from error
+
+
+def download_image_bytes(url, label="image"):
+    """Скачивает изображение с повторами и валидирует, что это настоящая картинка.
+
+    Возвращает bytes либо бросает исключение.
+    """
+    referer = None
+    if "metmuseum.org" in url:
+        referer = "https://www.metmuseum.org/"
+    elif "clevelandart.org" in url:
+        referer = "https://www.clevelandart.org/"
+
+    headers = dict(IMG_HEADERS)
+    if referer:
+        headers["Referer"] = referer
+
+    response = _request_with_retries(url, headers=headers, label=label)
+    content = response.content
+
+    if len(content) < MIN_IMAGE_BYTES:
+        raise RuntimeError(
+            f"[{label}] Слишком маленький ответ ({len(content)} байт) — вероятно, не изображение."
+        )
+
+    content_type = (response.headers.get("Content-Type") or "").lower()
+    if content_type and "image" not in content_type:
+        raise RuntimeError(
+            f"[{label}] Неверный Content-Type: {content_type!r} (ожидали изображение)."
+        )
+
+    # Финальная проверка — реально ли это декодируется как изображение.
+    try:
+        Image.open(io.BytesIO(content)).verify()
+    except Exception as error:
+        raise RuntimeError(f"[{label}] Данные не распознаны как изображение: {error}") from error
+
+    return content
+
+
+# ==================================================================
+#                    Источники изображений (провайдеры)
+# ==================================================================
+
+SEARCH_TERMS = [
+    "painting", "landscape", "portrait", "still life", "watercolor",
+    "impressionism", "flowers", "seascape", "nature", "figure",
+]
+
+
+def _clean_meta(value):
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def met_candidates():
+    """Генератор кандидатов из The Metropolitan Museum of Art.
+
+    Отдаёт словари {image_url, title, artist, date, source}.
+    """
+    term = random.choice(SEARCH_TERMS)
+    search_url = "https://collectionapi.metmuseum.org/public/collection/v1/search"
+    object_url = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{}"
+
+    try:
+        data = fetch_json(
+            search_url,
+            {"hasImages": "true", "q": term},
+            "met-search",
+        )
+    except Exception as error:
+        print(f"[met] Поиск не удался: {error}")
+        return
+
+    object_ids = data.get("objectIDs") or []
+    if not object_ids:
+        print(f"[met] Поиск по '{term}' ничего не вернул.")
+        return
+
+    random.shuffle(object_ids)
+
+    for i, object_id in enumerate(object_ids[:MAX_CANDIDATES], start=1):
+        try:
+            obj = fetch_json(object_url.format(object_id), label=f"met-obj-{i} ({object_id})")
+        except Exception as error:
+            print(f"[met] Не удалось получить объект {object_id}: {error}")
+            continue
+
+        if not obj.get("isPublicDomain"):
+            continue
+
+        image_url = obj.get("primaryImage") or obj.get("primaryImageSmall")
+        if not image_url:
+            continue
+
+        yield {
+            "image_url": image_url,
+            "title": _clean_meta(obj.get("title")) or "Untitled",
+            "artist": _clean_meta(obj.get("artistDisplayName")) or "Unknown artist",
+            "date": _clean_meta(obj.get("objectDate")),
+            "source": "The Met",
+        }
+
+
+def cleveland_candidates():
+    """Генератор кандидатов из The Cleveland Museum of Art (Open Access, CC0)."""
+    term = random.choice(SEARCH_TERMS)
+    search_url = "https://openaccess-api.clevelandart.org/api/artworks/"
+
+    try:
+        data = fetch_json(
+            search_url,
+            {
+                "q": term,
+                "has_image": 1,
+                "cc0": 1,
+                "limit": 100,
+                "fields": "id,title,creators,creation_date,images",
+            },
+            "cma-search",
+        )
+    except Exception as error:
+        print(f"[cma] Поиск не удался: {error}")
+        return
+
+    records = data.get("data") or []
+    if not records:
+        print(f"[cma] Поиск по '{term}' ничего не вернул.")
+        return
+
+    random.shuffle(records)
+
+    for record in records[:MAX_CANDIDATES]:
+        images = record.get("images") or {}
+        # print — самое крупное, web — среднее; берём максимально доступное качество.
+        image_url = None
+        for key in ("print", "web"):
+            entry = images.get(key) or {}
+            if entry.get("url"):
+                image_url = entry["url"]
+                break
+        if not image_url:
+            continue
+
+        creators = record.get("creators") or []
+        artist = "Unknown artist"
+        if creators:
+            artist = _clean_meta(creators[0].get("description") or creators[0].get("name")) \
+                or "Unknown artist"
+            # У Cleveland часто в description есть роль/годы в скобках — обрежем.
+            artist = re.sub(r"\s*\(.*?\)\s*$", "", artist).strip() or "Unknown artist"
+
+        yield {
+            "image_url": image_url,
+            "title": _clean_meta(record.get("title")) or "Untitled",
+            "artist": artist,
+            "date": _clean_meta(record.get("creation_date")),
+            "source": "Cleveland Museum of Art",
+        }
+
+
+# Порядок провайдеров перемешиваем для разнообразия, но обходим все,
+# пока не получим годное изображение.
+PROVIDERS = [met_candidates, cleveland_candidates]
+
+
+def get_random_artwork_bytes():
+    """Пробует источники по очереди и возвращает (artwork_dict, image_bytes).
+
+    Устойчив к 403/406 и прочим ошибкам: пропускает проблемные кандидаты
+    и переходит к следующему источнику.
+    """
+    providers = PROVIDERS[:]
+    random.shuffle(providers)
+
+    last_error = None
+    tried = 0
+
+    for provider in providers:
+        print(f"\n=== Источник: {provider.__name__} ===")
+        for artwork in provider():
+            tried += 1
+            try:
+                image_bytes = download_image_bytes(
+                    artwork["image_url"], label=f"download ({artwork['source']})"
+                )
+                print(f"[ok] Изображение получено из {artwork['source']}: "
+                      f"{artwork['title']} ({len(image_bytes)} байт)")
+                return artwork, image_bytes
+            except Exception as error:
+                last_error = error
+                print(f"[skip] {artwork['source']} — {error}")
+                continue
+
+    raise RuntimeError(
+        f"Не удалось получить изображение ни из одного источника "
+        f"(проверено кандидатов: {tried}). Последняя ошибка: {last_error}"
+    )
+
+
+# ==================================================================
+#                      Обработка изображения
+# ==================================================================
 
 def clean_text(value, max_length):
     """Убирает лишние пробелы и переносы; ограничивает длину текста."""
@@ -48,13 +324,13 @@ def clean_text(value, max_length):
 
     return text
 
+
 def should_update():
     """Не создаёт новую картину до истечения заданного интервала."""
     if os.environ.get("FORCE_UPDATE") == "1":
         return True
 
     path = Path(LAST_UPDATE_FILE)
-
     if not path.exists():
         return True
 
@@ -65,73 +341,6 @@ def should_update():
     except Exception:
         return True
 
-def fetch_json(url, params, attempt_label):
-    response = requests.get(url, params=params, headers=API_HEADERS, timeout=25)
-    print(f"[{attempt_label}] GET {response.url} -> HTTP {response.status_code}")
-
-    if response.status_code != 200:
-        print(f"[{attempt_label}] Тело ответа (первые 500 символов): {response.text[:500]}")
-        response.raise_for_status()
-
-    try:
-        return response.json()
-    except ValueError as error:
-        print(f"[{attempt_label}] Ответ не является валидным JSON: {response.text[:500]}")
-        raise RuntimeError(f"Некорректный JSON от API: {error}") from error
-
-SEARCH_TERMS = [
-    "painting", "landscape", "portrait", "still life", "watercolor",
-    "drawing", "print", "sculpture", "art", "impressionism",
-]
-
-def get_random_artwork():
-    """Получает случайную картину с изображением из Met Museum Collection API."""
-    term = random.choice(SEARCH_TERMS)
-
-    search_data = fetch_json(
-        MET_SEARCH_URL,
-        {"hasImages": "true", "q": term},
-        "search",
-    )
-
-    object_ids = search_data.get("objectIDs") or []
-
-    if not object_ids:
-        raise RuntimeError(f"Поиск по запросу '{term}' не вернул результатов.")
-
-    random.shuffle(object_ids)
-
-    last_error = None
-
-    # Пробуем до 30 случайных объектов, пока не найдём подходящий с изображением.
-    for i, object_id in enumerate(object_ids[:30]):
-        try:
-            obj = fetch_json(
-                MET_OBJECT_URL.format(object_id=object_id),
-                {},
-                f"attempt-{i + 1} (id {object_id})",
-            )
-        except Exception as error:
-            print(f"[attempt-{i + 1}] Ошибка запроса объекта: {error}")
-            last_error = error
-            continue
-
-        image_url = obj.get("primaryImage")
-
-        if image_url and obj.get("isPublicDomain"):
-            print(f"[attempt-{i + 1}] Выбран объект {object_id} с изображением.")
-            return {
-                "image_url": image_url,
-                "title": obj.get("title") or "Untitled",
-                "artist": obj.get("artistDisplayName") or "Unknown artist",
-                "date": obj.get("objectDate") or "",
-            }
-
-        print(f"[attempt-{i + 1}] Пропущено: нет изображения или не public domain.")
-
-    raise RuntimeError(
-        f"Не удалось получить подходящую картину. Последняя ошибка: {last_error}"
-    )
 
 def get_font(size, bold=False):
     candidates = [
@@ -142,14 +351,13 @@ def get_font(size, bold=False):
         ),
         "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf",
     ]
-
     for font_path in candidates:
         try:
             return ImageFont.truetype(font_path, size)
         except Exception:
             pass
-
     return ImageFont.load_default()
+
 
 def upscale_if_needed(img, target_w, target_h):
     """Апскейлит изображение до покрытия целевого размера, если оно меньше."""
@@ -157,7 +365,6 @@ def upscale_if_needed(img, target_w, target_h):
     if w >= target_w and h >= target_h:
         return img
 
-    # фактор, на который нужно увеличить, чтобы хотя бы одна сторона покрыла цель
     factor = max(target_w / w, target_h / h)
     new_w = max(int(math.ceil(w * factor)), target_w)
     new_h = max(int(math.ceil(h * factor)), target_h)
@@ -165,48 +372,37 @@ def upscale_if_needed(img, target_w, target_h):
     print(f"[upscale] исходный размер {w}x{h}, upscale -> {new_w}x{new_h} (factor {factor:.2f})")
     return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
-def process_image_to_canvas(source_image_bytes):
-    """Обработка исходного изображения (apscale -> fit -> overlay -> sharpen)."""
-    source = Image.open(io.BytesIO(source_image_bytes)).convert("RGB")
 
-    # Апскейлим, если исходник меньше целевого размера
+def process_image_to_canvas(source_image_bytes):
+    """Обработка исходного изображения (upscale -> fit -> sharpen)."""
+    source = Image.open(io.BytesIO(source_image_bytes))
+    # Корректно обрабатываем ориентацию по EXIF и любые цветовые режимы.
+    source = ImageOps.exif_transpose(source).convert("RGB")
+
     source = upscale_if_needed(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
 
-    # Кадрируем и подгоняем под целевой размер с помощью LANCZOS
     canvas = ImageOps.fit(
         source,
         (OUTPUT_WIDTH, OUTPUT_HEIGHT),
         method=Image.Resampling.LANCZOS,
         centering=(0.5, 0.5),
-    ).convert("RGBA")
+    ).convert("RGB")
 
-    # Применяем лёгкую коррекцию резкости и контраста
-    # Сначала UnsharpMask для повышения локальной чёткости
-    final = canvas.convert("RGB")
-    final = final.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
-
-    # Лёгкая корректировка контраста и резкости
+    # Повышаем локальную чёткость и слегка контраст — лучше смотрится на e-paper.
+    final = canvas.filter(ImageFilter.UnsharpMask(radius=1.2, percent=130, threshold=3))
     try:
-        enhancer = ImageEnhance.Sharpness(final)
-        final = enhancer.enhance(1.05)  # небольшая прибавка резкости
-        contrast = ImageEnhance.Contrast(final)
-        final = contrast.enhance(1.02)
+        final = ImageEnhance.Sharpness(final).enhance(1.08)
+        final = ImageEnhance.Contrast(final).enhance(1.04)
+        final = ImageEnhance.Color(final).enhance(1.03)
     except Exception:
-        # если ImageEnhance недоступен — игнорируем
         pass
 
     return final
 
-def create_image(artwork):
-    # Скачиваем изображение с правильными заголовками
-    print(f"[image-download] GET {artwork['image_url']}")
-    image_response = requests.get(artwork["image_url"], headers=IMG_HEADERS, timeout=60)
-    print(f"[image-download] -> HTTP {image_response.status_code}")
-    image_response.raise_for_status()
 
-    final_image = process_image_to_canvas(image_response.content)
+def create_image(artwork, image_bytes):
+    final_image = process_image_to_canvas(image_bytes)
 
-    # Подложка и текстовая плашка (как и раньше) — рисуем поверх final_image
     overlay = Image.new("RGBA", final_image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
@@ -225,48 +421,26 @@ def create_image(artwork):
     title_box = draw.textbbox((0, 0), title, font=title_font)
     meta_box = draw.textbbox((0, 0), meta, font=meta_font)
 
-    text_width = max(
-        title_box[2] - title_box[0],
-        meta_box[2] - meta_box[0],
-    )
-    box_width = min(
-        text_width + padding_x * 2,
-        int(OUTPUT_WIDTH * 0.62),
-    )
+    text_width = max(title_box[2] - title_box[0], meta_box[2] - meta_box[0])
+    box_width = min(text_width + padding_x * 2, int(OUTPUT_WIDTH * 0.62))
 
     x1 = margin
     y1 = OUTPUT_HEIGHT - box_height - margin
     x2 = x1 + box_width
     y2 = y1 + box_height
 
-    draw.rounded_rectangle(
-        (x1, y1, x2, y2),
-        radius=4,
-        fill=(255, 255, 255, 230),
-    )
-
-    draw.text(
-        (x1 + padding_x, y1 + 5),
-        title,
-        font=title_font,
-        fill=(0, 0, 0, 255),
-    )
-    draw.text(
-        (x1 + padding_x, y1 + 27),
-        meta,
-        font=meta_font,
-        fill=(45, 45, 45, 255),
-    )
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=4, fill=(255, 255, 255, 230))
+    draw.text((x1 + padding_x, y1 + 5), title, font=title_font, fill=(0, 0, 0, 255))
+    draw.text((x1 + padding_x, y1 + 27), meta, font=meta_font, fill=(45, 45, 45, 255))
 
     composite = Image.alpha_composite(final_image.convert("RGBA"), overlay).convert("RGB")
-
-    # Сохраняем с высоким качеством (меньше артефактов JPEG)
-    composite.save(OUTPUT_IMAGE, "JPEG", quality=95, optimize=False)
+    composite.save(OUTPUT_IMAGE, "JPEG", quality=95, optimize=True)
 
     return title, meta
 
+
 def write_html(version):
-    """Страница не исполняет JS: она немедленно открывает готовый JPG."""
+    """Страница немедленно открывает готовый JPG (без исполнения JS)."""
     html = f"""<!doctype html>
 <html>
 <head>
@@ -287,16 +461,6 @@ def write_html(version):
       height: 100vh;
       object-fit: contain;
     }}
-    .meta {{
-      position: absolute;
-      left: 10px;
-      bottom: 10px;
-      background: rgba(255,255,255,0.9);
-      padding: 6px 10px;
-      border-radius: 6px;
-      color: #111;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-    }}
   </style>
 </head>
 <body>
@@ -306,19 +470,21 @@ def write_html(version):
 """
     Path(OUTPUT_HTML).write_text(html, encoding="utf-8")
 
+
 def main():
     if not should_update():
         print("Интервал ещё не истёк: генерация пропущена.")
         return
 
-    artwork = get_random_artwork()
-    title, meta = create_image(artwork)
+    artwork, image_bytes = get_random_artwork_bytes()
+    title, meta = create_image(artwork, image_bytes)
 
     version = int(time.time())
     write_html(version)
     Path(LAST_UPDATE_FILE).write_text(str(version), encoding="utf-8")
 
-    print(f"Создана новая картина: {title} — {meta}")
+    print(f"\nСоздана новая картина: {title} — {meta} [{artwork['source']}]")
+
 
 if __name__ == "__main__":
     try:
