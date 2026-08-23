@@ -2,11 +2,17 @@ name: Update ePaper artwork
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/2 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# Отменяем параллельные запуски: один и тот же workflow не будет
+# толкать коммиты одновременно и создавать гонку при push.
+concurrency:
+  group: update-art
+  cancel-in-progress: false
 
 jobs:
   generate:
@@ -34,6 +40,22 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add current.jpg index.html last_update.txt
-          git diff --staged --quiet || git commit -m "Update current artwork"
-          git push
+          # Добавляем все сгенерированные файлы, включая новые разрешения.
+          git add -A
+          if git diff --staged --quiet; then
+            echo "Изменений нет — пропускаем коммит."
+            exit 0
+          fi
+          git commit -m "Update current artwork"
+          # Устойчивый push: при гонке подтягиваем чужие коммиты (rebase) и повторяем.
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              echo "Push выполнен с попытки $attempt."
+              exit 0
+            fi
+            echo "Push отклонён (попытка $attempt). Делаю rebase и повтор..."
+            git pull --rebase --autostash origin main || true
+            sleep 3
+          done
+          echo "Не удалось выполнить push после нескольких попыток." >&2
+          exit 1
