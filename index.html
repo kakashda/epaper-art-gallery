@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Random Museum Artwork</title>
+  <title>Art Gallery</title>
   <style>
     * {
       margin: 0;
@@ -11,135 +11,146 @@
       box-sizing: border-box;
     }
     html, body {
-      width: 100%;
-      height: 100%;
-      background-color: #ffffff;
-      color: #000000;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-      overflow: hidden;
-    }
-    #container {
-      display: flex;
-      flex-direction: row;
       width: 100vw;
       height: 100vh;
-      padding: 12px;
-      gap: 16px;
-    }
-    #image-box {
-      flex: 1 1 55%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #fdfdfd;
-    }
-    #art-image {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-    }
-    #info-box {
-      flex: 1 1 45%;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 6px 10px;
+      background-color: #000000;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       overflow: hidden;
+      position: relative;
+    }
+    /* Картина занимает весь экран */
+    #art-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      z-index: 1;
+      background-color: #ffffff;
+    }
+    /* Ненавязчивая плашка в нижнем углу */
+    #overlay-card {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      max-width: 42%;
+      background: rgba(255, 255, 255, 0.92);
+      color: #000000;
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+      z-index: 10;
+      border: 1px solid #ddd;
     }
     #title {
-      font-size: 22px;
+      font-size: 15px;
       font-weight: 700;
-      line-height: 1.25;
-      margin-bottom: 8px;
-      color: #000;
+      line-height: 1.2;
+      margin-bottom: 2px;
     }
     #artist {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: 600;
-      margin-bottom: 6px;
       color: #222;
+      margin-bottom: 2px;
     }
     #details {
-      font-size: 13px;
+      font-size: 11px;
       color: #555;
-      margin-bottom: 12px;
+      margin-bottom: 4px;
     }
     #description {
-      font-size: 13px;
-      line-height: 1.4;
-      color: #111;
+      font-size: 11px;
+      line-height: 1.25;
+      color: #222;
       display: -webkit-box;
-      -webkit-line-clamp: 8;
+      -webkit-line-clamp: 3;
       -webkit-box-orient: vertical;
       overflow: hidden;
+    }
+    #loader {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 16px;
+      color: #888;
+      z-index: 0;
     }
   </style>
 </head>
 <body>
-  <div id="container">
-    <div id="image-box">
-      <img id="art-image" src="" alt="Изображение картины">
-    </div>
-    <div id="info-box">
-      <div id="title">Загрузка шедевра...</div>
-      <div id="artist">Поиск в каталоге музея</div>
-      <div id="details"></div>
-      <div id="description"></div>
-    </div>
+  <div id="loader">Загрузка шедевра...</div>
+  <img id="art-image" alt="Картина" />
+
+  <div id="overlay-card" style="display: none;">
+    <div id="title"></div>
+    <div id="artist"></div>
+    <div id="details"></div>
+    <div id="description"></div>
   </div>
 
   <script>
-    async function loadRandomArtwork() {
-      const titleEl = document.getElementById('title');
-      const artistEl = document.getElementById('artist');
-      const detailsEl = document.getElementById('details');
-      const descEl = document.getElementById('description');
-      const imgEl = document.getElementById('art-image');
-
-      // 100 страниц по 15 шедевров = 1500+ картин в ротации
-      const randomPage = Math.floor(Math.random() * 95) + 1;
-      const url = `https://api.artic.edu/api/v1/artworks?page=${randomPage}&limit=15&fields=id,title,artist_display,date_display,medium_display,image_id,thumbnail,short_description,description`;
+    async function loadArt() {
+      const page = Math.floor(Math.random() * 80) + 1;
+      const apiUrl = `https://api.artic.edu/api/v1/artworks?page=${page}&limit=12&fields=id,title,artist_display,date_display,medium_display,image_id,thumbnail,short_description,description`;
 
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const resp = await fetch(apiUrl);
+        const data = await resp.json();
+        const items = (data.data || []).filter(i => i.image_id);
 
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        if (!res.ok) throw new Error('Network error');
-        const json = await res.json();
-        
-        const validItems = (json.data || []).filter(item => item.image_id);
-        if (!validItems.length) throw new Error('No items with image');
+        if (!items.length) throw new Error('No items');
+        const art = items[Math.floor(Math.random() * items.length)];
 
-        const item = validItems[Math.floor(Math.random() * validItems.length)];
-        
-        titleEl.textContent = item.title || 'Картина';
-        artistEl.textContent = item.artist_display || 'Неизвестный мастер';
-        
-        const meta = [item.date_display, item.medium_display].filter(Boolean);
-        detailsEl.textContent = meta.join(' • ');
+        document.getElementById('title').textContent = art.title || 'Картина';
+        document.getElementById('artist').textContent = art.artist_display || 'Неизвестный мастер';
+        document.getElementById('details').textContent = [art.date_display, art.medium_display].filter(Boolean).join(' • ');
 
-        let rawText = item.short_description || item.description || (item.thumbnail ? item.thumbnail.alt_text : '') || 'Экспонат из коллекции Чикагского института искусств.';
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(rawText, 'text/html');
-        descEl.textContent = doc.body.textContent || doc.body.innerText || '';
+        let rawDesc = art.short_description || art.description || (art.thumbnail ? art.thumbnail.alt_text : '') || '';
+        const tmp = document.createElement('div');
+        tmp.innerHTML = rawDesc;
+        const cleanDesc = (tmp.textContent || tmp.innerText || '').trim();
+        
+        const descEl = document.getElementById('description');
+        if (cleanDesc) {
+          descEl.textContent = cleanDesc;
+          descEl.style.display = '-webkit-box';
+        } else {
+          descEl.style.display = 'none';
+        }
 
-        // IIIF сервис масштабирования изображения до 450px по ширине для ePaper
-        imgEl.src = `https://www.artic.edu/iiif/2/${item.image_id}/full/450,/default.jpg`;
-      } catch (err) {
-        // Запасной fallback на случай сбоя сети
-        titleEl.textContent = 'Звёздная ночь';
-        artistEl.textContent = 'Винсент ван Гог';
-        detailsEl.textContent = '1889 • Холст, масло';
-        descEl.textContent = 'Шедевр постимпрессионизма. Знаменитый пейзаж с вихрями ночного неба, написанный в Сен-Реми-де-Прованс.';
-        imgEl.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/480px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg';
+        const img = document.getElementById('art-image');
+        // Используем базовый CDN URL Чикаго, который возвращает картинку надежно
+        img.onload = () => {
+          document.getElementById('loader').style.display = 'none';
+          document.getElementById('overlay-card').style.display = 'block';
+        };
+        img.onerror = () => {
+          // Запасной fallback на надежный Wikimedia URL при сбое CDN
+          img.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/800px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg';
+          document.getElementById('title').textContent = 'Звёздная ночь';
+          document.getElementById('artist').textContent = 'Винсент ван Гог';
+          document.getElementById('details').textContent = '1889';
+          document.getElementById('overlay-card').style.display = 'block';
+        };
+
+        // Загрузка оптимизированного под 800px изображения
+        img.src = `https://www.artic.edu/iiif/2/${art.image_id}/full/843,/0/default.jpg`;
+
+      } catch (e) {
+        const img = document.getElementById('art-image');
+        img.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Caspar_David_Friedrich_-_Wanderer_%C3%BCber_dem_Nebelmeer.jpg/800px-Caspar_David_Friedrich_-_Wanderer_%C3%BCber_dem_Nebelmeer.jpg';
+        document.getElementById('title').textContent = 'Странник над морем тумана';
+        document.getElementById('artist').textContent = 'Каспар Давид Фридрих';
+        document.getElementById('details').textContent = '1818';
+        document.getElementById('overlay-card').style.display = 'block';
       }
     }
 
-    loadRandomArtwork();
+    loadArt();
   </script>
 </body>
 </html>
