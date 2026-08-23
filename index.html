@@ -14,143 +14,92 @@
       width: 100vw;
       height: 100vh;
       background-color: #000000;
-      color: #ffffff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       overflow: hidden;
-      position: relative;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     }
-    /* Картина занимает весь экран */
     #art-image {
-      position: absolute;
-      top: 0;
-      left: 0;
       width: 100vw;
       height: 100vh;
       object-fit: contain;
-      z-index: 1;
-      background-color: #ffffff;
+      display: block;
+      background-color: #000000;
     }
-    /* Ненавязчивая плашка в нижнем углу */
-    #overlay-card {
+    #badge {
       position: absolute;
       bottom: 12px;
-      right: 12px;
-      max-width: 42%;
-      background: rgba(255, 255, 255, 0.92);
-      color: #000000;
-      padding: 8px 12px;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-      z-index: 10;
-      border: 1px solid #ddd;
+      left: 12px;
+      max-width: 60%;
+      background: rgba(0, 0, 0, 0.75);
+      color: #ffffff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      border-left: 3px solid #ffffff;
+      backdrop-filter: blur(4px);
     }
     #title {
       font-size: 15px;
-      font-weight: 700;
+      font-weight: bold;
       line-height: 1.2;
       margin-bottom: 2px;
     }
-    #artist {
-      font-size: 13px;
-      font-weight: 600;
-      color: #222;
-      margin-bottom: 2px;
-    }
-    #details {
-      font-size: 11px;
-      color: #555;
-      margin-bottom: 4px;
-    }
-    #description {
-      font-size: 11px;
-      line-height: 1.25;
-      color: #222;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    #loader {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 16px;
-      color: #888;
-      z-index: 0;
+    #meta {
+      font-size: 12px;
+      color: #cccccc;
+      line-height: 1.2;
     }
   </style>
 </head>
 <body>
-  <div id="loader">Загрузка шедевра...</div>
-  <img id="art-image" alt="Картина" />
-
-  <div id="overlay-card" style="display: none;">
+  <img id="art-image" alt="Artwork" />
+  <div id="badge" style="display: none;">
     <div id="title"></div>
-    <div id="artist"></div>
-    <div id="details"></div>
-    <div id="description"></div>
+    <div id="meta"></div>
   </div>
 
   <script>
-    async function loadArt() {
-      const page = Math.floor(Math.random() * 80) + 1;
-      const apiUrl = `https://api.artic.edu/api/v1/artworks?page=${page}&limit=12&fields=id,title,artist_display,date_display,medium_display,image_id,thumbnail,short_description,description`;
+    // Пул проверенных ID знаменитых картин из Met Museum с открытыми правами
+    const curatedIds = [
+      436535, 436528, 436532, 436534, 436533, 435882, 437980, 437984,
+      437986, 435848, 435851, 435853, 435852, 436105, 436101, 437053,
+      437056, 437058, 437059, 436839, 436838, 436840, 437372, 437375,
+      436524, 436529, 436530, 436531, 459123, 459106, 459108, 459110,
+      435621, 435641, 435702, 435722, 437658, 437654, 436575, 436573
+    ];
+
+    async function loadMetArt() {
+      const titleEl = document.getElementById('title');
+      const metaEl = document.getElementById('meta');
+      const badgeEl = document.getElementById('badge');
+      const imgEl = document.getElementById('art-image');
 
       try {
-        const resp = await fetch(apiUrl);
+        const randomId = curatedIds[Math.floor(Math.random() * curatedIds.length)];
+        const resp = await fetch(`https://collectionapi.metmuseum.org/public/collection/v1/objects/${randomId}`);
         const data = await resp.json();
-        const items = (data.data || []).filter(i => i.image_id);
 
-        if (!items.length) throw new Error('No items');
-        const art = items[Math.floor(Math.random() * items.length)];
+        const imgUrl = data.primaryImageSmall || data.primaryImage;
+        if (!imgUrl) throw new Error('No image URL');
 
-        document.getElementById('title').textContent = art.title || 'Картина';
-        document.getElementById('artist').textContent = art.artist_display || 'Неизвестный мастер';
-        document.getElementById('details').textContent = [art.date_display, art.medium_display].filter(Boolean).join(' • ');
+        titleEl.textContent = data.title || 'Artwork';
+        const artist = data.artistDisplayName || 'Unknown Artist';
+        const date = data.objectDate ? ` (${data.objectDate})` : '';
+        metaEl.textContent = `$${artist}$${date}`;
 
-        let rawDesc = art.short_description || art.description || (art.thumbnail ? art.thumbnail.alt_text : '') || '';
-        const tmp = document.createElement('div');
-        tmp.innerHTML = rawDesc;
-        const cleanDesc = (tmp.textContent || tmp.innerText || '').trim();
-        
-        const descEl = document.getElementById('description');
-        if (cleanDesc) {
-          descEl.textContent = cleanDesc;
-          descEl.style.display = '-webkit-box';
-        } else {
-          descEl.style.display = 'none';
-        }
-
-        const img = document.getElementById('art-image');
-        // Используем базовый CDN URL Чикаго, который возвращает картинку надежно
-        img.onload = () => {
-          document.getElementById('loader').style.display = 'none';
-          document.getElementById('overlay-card').style.display = 'block';
+        imgEl.onload = () => {
+          badgeEl.style.display = 'block';
         };
-        img.onerror = () => {
-          // Запасной fallback на надежный Wikimedia URL при сбое CDN
-          img.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/800px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg';
-          document.getElementById('title').textContent = 'Звёздная ночь';
-          document.getElementById('artist').textContent = 'Винсент ван Гог';
-          document.getElementById('details').textContent = '1889';
-          document.getElementById('overlay-card').style.display = 'block';
-        };
-
-        // Загрузка оптимизированного под 800px изображения
-        img.src = `https://www.artic.edu/iiif/2/${art.image_id}/full/843,/0/default.jpg`;
+        imgEl.src = imgUrl;
 
       } catch (e) {
-        const img = document.getElementById('art-image');
-        img.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Caspar_David_Friedrich_-_Wanderer_%C3%BCber_dem_Nebelmeer.jpg/800px-Caspar_David_Friedrich_-_Wanderer_%C3%BCber_dem_Nebelmeer.jpg';
-        document.getElementById('title').textContent = 'Странник над морем тумана';
-        document.getElementById('artist').textContent = 'Каспар Давид Фридрих';
-        document.getElementById('details').textContent = '1818';
-        document.getElementById('overlay-card').style.display = 'block';
+        // Надежный fallback
+        imgEl.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/800px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg';
+        titleEl.textContent = 'Звёздная ночь';
+        metaEl.textContent = 'Винсент ван Гог (1889)';
+        badgeEl.style.display = 'block';
       }
     }
 
-    loadArt();
+    loadMetArt();
   </script>
 </body>
 </html>
