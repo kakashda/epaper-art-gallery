@@ -1,0 +1,39 @@
+name: Update ePaper artwork
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_UPDATE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install libraries
+        run: pip install pillow requests
+
+      - name: Generate current artwork
+        run: python generate_art.py
+
+      - name: Save updated image
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add current.jpg index.html last_update.txt
+          git diff --staged --quiet || git commit -m "Update current artwork"
+          git push
