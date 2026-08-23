@@ -18,9 +18,11 @@ OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
 LAST_UPDATE_FILE = "last_update.txt"
 
-# Art Institute of Chicago
-AIC_API = "https://api.artic.edu/api/v1/artworks"
-AIC_IIIF = "https://www.artic.edu/iiif/2/{image_id}/full/843,/0/default.jpg"
+# The Metropolitan Museum of Art Collection API
+# (сайт artic.edu заблокировал раздачу изображений через Cloudflare bot-protection,
+#  поэтому используем Met Museum — их API открыт и без такой защиты)
+MET_SEARCH_URL = "https://collectionapi.metmuseum.org/public/collection/v1/search"
+MET_OBJECT_URL = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{object_id}"
 # ================================================
 
 HEADERS = {
@@ -39,15 +41,6 @@ def clean_text(value, max_length):
 
     return text
 
-def short_artist(value):
-    """У artist_display может быть несколько строк — берём первую."""
-    lines = [
-        line.strip()
-        for line in str(value or "").splitlines()
-        if line.strip()
-    ]
-    return clean_text(lines[0] if lines else "Unknown artist", 42)
-
 def should_update():
     """Не создаёт новую картину до истечения заданного интервала."""
     if os.environ.get("FORCE_UPDATE") == "1":
@@ -65,10 +58,8 @@ def should_update():
     except Exception:
         return True
 
-def fetch_json(params, attempt_label):
-    """Делает запрос и подробно логирует ответ в случае проблем."""
-    response = requests.get(AIC_API, params=params, headers=HEADERS, timeout=25)
-
+def fetch_json(url, params, attempt_label):
+    response = requests.get(url, params=params, headers=HEADERS, timeout=25)
     print(f"[{attempt_label}] GET {response.url} -> HTTP {response.status_code}")
 
     if response.status_code != 200:
@@ -81,50 +72,58 @@ def fetch_json(params, attempt_label):
         print(f"[{attempt_label}] Ответ не является валидным JSON: {response.text[:500]}")
         raise RuntimeError(f"Некорректный JSON от API: {error}") from error
 
+# Список общих поисковых слов, чтобы получать разнообразные картины
+SEARCH_TERMS = [
+    "painting", "landscape", "portrait", "still life", "watercolor",
+    "drawing", "print", "sculpture", "art", "impressionism",
+]
+
 def get_random_artwork():
-    """Получает случайную работу с изображением из каталога Art Institute of Chicago."""
-    first_data = fetch_json(
-        {"page": 1, "limit": 100, "fields": "id"},
-        "pagination-check",
+    """Получает случайную картину с изображением из Met Museum Collection API."""
+    term = random.choice(SEARCH_TERMS)
+
+    search_data = fetch_json(
+        MET_SEARCH_URL,
+        {"hasImages": "true", "q": term},
+        "search",
     )
 
-    pagination = first_data.get("pagination", {})
-    total_pages = int(pagination.get("total_pages", 1))
-    print(f"Всего страниц (limit=100): {total_pages}")
+    object_ids = search_data.get("objectIDs") or []
+
+    if not object_ids:
+        raise RuntimeError(f"Поиск по запросу '{term}' не вернул результатов.")
+
+    random.shuffle(object_ids)
 
     last_error = None
 
-    # Некоторые записи не имеют изображения: пробуем несколько раз.
-    for i in range(12):
-        page = random.randint(1, max(1, total_pages))
-
+    # Пробуем до 15 случайных объектов, пока не найдём подходящий с изображением.
+    for i, object_id in enumerate(object_ids[:15]):
         try:
-            data = fetch_json(
-                {
-                    "page": page,
-                    "limit": 100,
-                    "fields": "id,title,artist_display,date_display,image_id",
-                },
-                f"attempt-{i + 1} (page {page})",
+            obj = fetch_json(
+                MET_OBJECT_URL.format(object_id=object_id),
+                {},
+                f"attempt-{i + 1} (id {object_id})",
             )
         except Exception as error:
-            print(f"[attempt-{i + 1}] Ошибка запроса: {error}")
+            print(f"[attempt-{i + 1}] Ошибка запроса объекта: {error}")
             last_error = error
-            time.sleep(1.5)
             continue
 
-        items = data.get("data", [])
-        candidates = [item for item in items if item.get("image_id")]
+        image_url = obj.get("primaryImage")
 
-        print(f"[attempt-{i + 1}] Получено записей: {len(items)}, с изображением: {len(candidates)}")
+        if image_url and obj.get("isPublicDomain"):
+            return {
+                "image_url": image_url,
+                "title": obj.get("title") or "Untitled",
+                "artist": obj.get("artistDisplayName") or "Unknown artist",
+                "date": obj.get("objectDate") or "",
+            }
 
-        if candidates:
-            return random.choice(candidates)
-
-        time.sleep(0.5)
+        print(f"[attempt-{i + 1}] Пропущено: нет изображения или не public domain.")
 
     raise RuntimeError(
-        f"Не удалось получить запись с изображением из каталога. Последняя ошибка: {last_error}"
+        f"Не удалось получить подходящую картину. Последняя ошибка: {last_error}"
     )
 
 def get_font(size, bold=False):
@@ -146,11 +145,8 @@ def get_font(size, bold=False):
     return ImageFont.load_default()
 
 def create_image(artwork):
-    image_id = artwork["image_id"]
-    image_url = AIC_IIIF.format(image_id=image_id)
-
     image_response = requests.get(
-        image_url,
+        artwork["image_url"],
         headers=HEADERS,
         timeout=45,
     )
@@ -169,8 +165,8 @@ def create_image(artwork):
     ).convert("RGBA")
 
     title = clean_text(artwork.get("title") or "Untitled", 48)
-    artist = short_artist(artwork.get("artist_display"))
-    year = clean_text(artwork.get("date_display"), 18)
+    artist = clean_text(artwork.get("artist") or "Unknown artist", 42)
+    year = clean_text(artwork.get("date"), 18)
     meta = f"{artist} · {year}" if year else artist
 
     overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
