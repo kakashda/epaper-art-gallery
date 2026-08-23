@@ -14,19 +14,35 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageEnhance
 # ================== НАСТРОЙКИ ==================
 REFRESH_INTERVAL_MINUTES = 2
 
-# Базовое разрешение e-paper (соотношение сторон 5:3). Все остальные форматы
-# используют это же соотношение, поэтому кадрирование одинаковое — меняется
-# только чёткость/размер.
+# Разрешение панели Seeed reTerminal E1002 — ровно 800x480 (7.3", Spectra 6).
 OUTPUT_WIDTH = 800
 OUTPUT_HEIGHT = 480
 
-# Набор выходных файлов: (имя_файла, ширина, высота).
-# current.jpg — по умолчанию (как раньше), остальные — крупнее, вплоть до 4K.
+# --- Главный файл под E1002 (SenseCraft HMI, ручная загрузка) ---------------
+# E1002 — это полноцветный E Ink Spectra 6 (ACeP). Панель физически умеет
+# показывать ТОЛЬКО 6 чистых цветов (без градаций серого). Поэтому мы сами
+# готовим 6-цветное изображение с дизерингом и отдаём PNG (lossless), иначе
+# JPEG размывает точки дизеринга в грязь.
+OUTPUT_PNG = "current.png"
+
+# Палитра E Ink Spectra 6: чёрный, белый, красный, жёлтый, зелёный, синий.
+# Значения подобраны как «чистые» цвета пигментов панели.
+SPECTRA6_PALETTE = [
+    (0, 0, 0),        # чёрный
+    (255, 255, 255),  # белый
+    (200, 40, 40),    # красный
+    (230, 200, 40),   # жёлтый
+    (50, 130, 70),    # зелёный
+    (45, 70, 150),    # синий
+]
+
+# JPEG-версии (для веб-превью / других экранов). Для самого E1002 не нужны,
+# но пусть остаются, чтобы index.html и прочее не ломались.
 OUTPUT_SIZES = [
-    ("current.jpg", 800, 480),      # по умолчанию (e-paper)
-    ("current_1600.jpg", 1600, 960),   # 2x — HD
-    ("current_2560.jpg", 2560, 1536),  # ~1440p
-    ("current_3840.jpg", 3840, 2304),  # ~4K
+    ("current.jpg", 800, 480),
+    ("current_1600.jpg", 1600, 960),
+    ("current_2560.jpg", 2560, 1536),
+    ("current_3840.jpg", 3840, 2304),
 ]
 
 OUTPUT_IMAGE = "current.jpg"
@@ -567,14 +583,65 @@ def draw_caption(image, lines, scale):
     return Image.alpha_composite(image, overlay).convert("RGB")
 
 
+def _build_palette_image():
+    """Создаёт PIL-палитру (P-mode) из SPECTRA6_PALETTE для quantize()."""
+    pal_img = Image.new("P", (1, 1))
+    flat = []
+    for r, g, b in SPECTRA6_PALETTE:
+        flat.extend([r, g, b])
+    # PIL требует 256 цветов в палитре — добиваем последним цветом.
+    flat.extend(flat[-3:] * (256 - len(SPECTRA6_PALETTE)))
+    pal_img.putpalette(flat)
+    return pal_img
+
+
+def to_spectra6(rgb_image):
+    """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность
+    и квантует к 6 цветам с дизерингом Флойда–Стайнберга.
+
+    Возвращает RGB-изображение, где присутствуют только 6 цветов панели
+    (готово к показу; дизеринг уже «вшит» в пиксели)."""
+    img = rgb_image.convert("RGB")
+
+    # E-paper блёклый и с узкой гаммой — предварительно «пережимаем» картинку,
+    # иначе почти всё уйдёт в мутный чёрно-белый шум.
+    try:
+        img = ImageOps.autocontrast(img, cutoff=1)
+        img = ImageEnhance.Color(img).enhance(1.6)      # насыщенность
+        img = ImageEnhance.Contrast(img).enhance(1.18)  # контраст
+        img = ImageEnhance.Brightness(img).enhance(1.03)
+    except Exception:
+        pass
+
+    # Квантование к нашей палитре с дизерингом Флойда–Стайнберга (dither=FLOYDSTEINBERG).
+    palette_img = _build_palette_image()
+    quantized = img.quantize(
+        palette=palette_img,
+        dither=Image.Dither.FLOYDSTEINBERG,
+    )
+    return quantized.convert("RGB")
+
+
 def create_image(artwork, image_bytes):
-    """Генерирует все форматы из OUTPUT_SIZES с одинаковым содержимым."""
+    """Генерирует:
+      - current.png — ГЛАВНЫЙ файл под E1002 (6 цветов Spectra 6, дизеринг, PNG);
+      - current*.jpg — веб-превью/прочие экраны (обычный полноцветный JPEG).
+    """
     source = Image.open(io.BytesIO(image_bytes))
     # Корректно обрабатываем ориентацию по EXIF и любые цветовые режимы.
     source = ImageOps.exif_transpose(source).convert("RGB")
 
     lines = build_caption_lines(artwork)
 
+    # --- Главный файл под E1002: 800x480, подпись, затем квантование в 6 цветов ---
+    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+    base_captioned = draw_caption(base, lines, scale=1.0)
+    spectra = to_spectra6(base_captioned)
+    # PNG обязательно (lossless) — JPEG размыл бы точки дизеринга.
+    spectra.save(OUTPUT_PNG, "PNG", optimize=True)
+    print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (Spectra6, 6 цветов, дизеринг)")
+
+    # --- JPEG-версии (полноцветные, для веба и других дисплеев) ---
     for filename, width, height in OUTPUT_SIZES:
         canvas = process_image_to_canvas(source, width, height)
         composite = draw_caption(canvas, lines, scale=height / OUTPUT_HEIGHT)
