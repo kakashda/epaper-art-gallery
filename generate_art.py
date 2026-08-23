@@ -65,6 +65,13 @@ BROWSER_UA = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+# Wikimedia требует описательный User-Agent (иначе HTTP 429). См.
+# https://meta.wikimedia.org/wiki/User-Agent_policy
+WIKIMEDIA_UA = (
+    "epaper-art-gallery/1.0 (https://github.com/kakashda/epaper-art-gallery; "
+    "kakashda@users.noreply.github.com)"
+)
+
 # Заголовки для API-запросов (JSON)
 API_HEADERS = {
     "User-Agent": BROWSER_UA,
@@ -157,6 +164,11 @@ def download_image_bytes(url, label="image"):
     if referer:
         headers["Referer"] = referer
 
+    # Wikimedia (Commons) требует ОПИСАТЕЛЬНЫЙ User-Agent по своей политике —
+    # обобщённый браузерный UA с облачных IP они throttl-ят (HTTP 429).
+    if "wikimedia.org" in url or "wikipedia.org" in url:
+        headers["User-Agent"] = WIKIMEDIA_UA
+
     response = _request_with_retries(url, headers=headers, label=label)
     content = response.content
 
@@ -202,6 +214,47 @@ FAMOUS_ARTISTS = [
     "Gustav Klimt", "Albrecht Durer", "Hans Holbein the Younger",
     "Nicolas de Stael", "Georges de La Tour", "Jean-Baptiste-Simeon Chardin",
 ]
+
+# Wikidata QID знаменитых европейских мастеров. Через Wikidata мы получаем
+# картины из МУЗЕЕВ ВСЕЙ ЕВРОПЫ (Прадо, Лувр, Уффици, Вена, Мюнхен, Ватикан,
+# Португалия и т.д.) с указанием музея-хранителя и его страны.
+ARTIST_QIDS = {
+    "Q5582": "Vincent van Gogh", "Q296": "Claude Monet",
+    "Q5598": "Rembrandt van Rijn", "Q41264": "Johannes Vermeer",
+    "Q39931": "Pierre-Auguste Renoir", "Q46373": "Edgar Degas",
+    "Q35548": "Paul Cezanne", "Q40599": "Edouard Manet",
+    "Q134741": "Camille Pissarro", "Q37693": "Paul Gauguin",
+    "Q34013": "Georges Seurat", "Q159758": "J. M. W. Turner",
+    "Q33477": "Eugene Delacroix", "Q5432": "Francisco Goya",
+    "Q297": "Diego Velazquez", "Q301": "El Greco", "Q47551": "Titian",
+    "Q5597": "Raphael", "Q5669": "Sandro Botticelli",
+    "Q43270": "Pieter Bruegel the Elder", "Q5599": "Peter Paul Rubens",
+    "Q42207": "Caravaggio", "Q41554": "Nicolas Poussin",
+    "Q127171": "Jean-Honore Fragonard", "Q148475": "Camille Corot",
+    "Q34618": "Gustave Courbet", "Q148458": "Jean-Francois Millet",
+    "Q150679": "Anthony van Dyck", "Q167654": "Frans Hals",
+    "Q182664": "Canaletto", "Q82445": "Henri de Toulouse-Lautrec",
+    "Q34661": "Gustav Klimt", "Q5580": "Albrecht Durer",
+    "Q48319": "Hans Holbein the Younger", "Q203371": "Georges de La Tour",
+    "Q207447": "Jean-Baptiste-Simeon Chardin", "Q762": "Leonardo da Vinci",
+    "Q5592": "Michelangelo", "Q102272": "Jan van Eyck",
+    "Q130531": "Hieronymus Bosch", "Q7814": "Giotto",
+    "Q205863": "Jan Steen", "Q470551": "Nicolas de Stael",
+}
+
+# Страны, музеи которых считаем «европейскими/евразийскими» (по названию из Wikidata).
+EUROPEAN_COUNTRIES = {
+    "Spain", "France", "Italy", "Germany", "Austria", "Netherlands",
+    "Belgium", "United Kingdom", "Kingdom of England", "Great Britain",
+    "Portugal", "Switzerland", "Denmark", "Sweden", "Norway", "Finland",
+    "Iceland", "Ireland", "Vatican City", "Holy See", "Russia",
+    "Russian Empire", "Poland", "Czech Republic", "Czechia", "Slovakia",
+    "Hungary", "Greece", "Romania", "Bulgaria", "Croatia", "Slovenia",
+    "Serbia", "Ukraine", "Estonia", "Latvia", "Lithuania", "Luxembourg",
+    "Monaco", "Malta", "Turkey", "Georgia", "Armenia", "Kazakhstan",
+    "Kingdom of the Netherlands", "Kingdom of Italy", "German Empire",
+    "Dutch Republic", "Republic of Venice", "Papal States",
+}
 
 # Резервные тематические запросы (если по конкретному мастеру ничего не нашли) —
 # тоже смещены в сторону европейской классической живописи.
@@ -486,11 +539,87 @@ def vam_candidates():
         }
 
 
+def wikidata_candidates():
+    """Генератор кандидатов из Wikidata — картины из МУЗЕЕВ ВСЕЙ ЕВРОПЫ.
+
+    Берёт случайного знаменитого мастера и запрашивает его живопись вместе с
+    музеем-хранителем (P195) и страной музея (P17). Оставляет только картины,
+    хранящиеся в европейских/евразийских музеях (Прадо, Лувр, Уффици, Вена,
+    Мюнхен, Ватикан, Португалия и т.д.). Изображения — с Wikimedia Commons
+    в высоком разрешении.
+    """
+    endpoint = "https://query.wikidata.org/sparql"
+    qids = list(ARTIST_QIDS.keys())
+    random.shuffle(qids)
+
+    bindings = []
+    chosen_qid = None
+    for qid in qids[:EURO_QUERY_ATTEMPTS]:
+        sparql = (
+            "SELECT ?item ?itemLabel ?img ?inception ?collLabel ?countryLabel WHERE { "
+            "?item wdt:P31 wd:Q3305213; wdt:P170 wd:%s; wdt:P18 ?img. "
+            "OPTIONAL { ?item wdt:P195 ?coll. OPTIONAL { ?coll wdt:P17 ?country. } } "
+            "OPTIONAL { ?item wdt:P571 ?inception. } "
+            'SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } '
+            "LIMIT 120" % qid
+        )
+        try:
+            data = fetch_json(endpoint, {"query": sparql, "format": "json"},
+                              f"wikidata-{qid}")
+        except Exception as error:
+            print(f"[wikidata] Запрос по {qid} ({ARTIST_QIDS[qid]}) не удался: {error}")
+            continue
+        rows = data.get("results", {}).get("bindings", [])
+        # оставляем только картины в европейских музеях
+        euro_rows = [
+            r for r in rows
+            if r.get("countryLabel", {}).get("value", "") in EUROPEAN_COUNTRIES
+        ]
+        if euro_rows:
+            bindings = euro_rows
+            chosen_qid = qid
+            print(f"[wikidata] {ARTIST_QIDS[qid]}: {len(euro_rows)} картин в музеях Европы "
+                  f"(из {len(rows)} всего).")
+            break
+        print(f"[wikidata] {ARTIST_QIDS[qid]}: нет картин в европейских музеях "
+              f"(всего {len(rows)}).")
+
+    if not bindings:
+        return
+
+    random.shuffle(bindings)
+    for row in bindings[:MAX_CANDIDATES]:
+        img = row.get("img", {}).get("value")
+        if not img:
+            continue
+        # Commons Special:FilePath — просим масштабированную версию (до 2600px),
+        # чтобы не тянуть гигантские TIFF/оригиналы.
+        sep = "&" if "?" in img else "?"
+        image_url = f"{img}{sep}width=2600"
+
+        museum = _clean_meta(row.get("collLabel", {}).get("value"))
+        country = _clean_meta(row.get("countryLabel", {}).get("value"))
+        source = museum or "European museum (Wikidata)"
+        if museum and country:
+            source = f"{museum}, {country}"
+
+        yield {
+            "image_url": image_url,
+            "title": _clean_meta(row.get("itemLabel", {}).get("value")) or "Untitled",
+            "artist": ARTIST_QIDS.get(chosen_qid, "Unknown artist"),
+            "date": _clean_meta(row.get("inception", {}).get("value"))[:4],
+            "medium": "oil painting",
+            "culture": country,
+            "source": source,
+        }
+
+
 # Провайдеры разбиты по ГЕОГРАФИИ музея (а не по происхождению картины):
-#   • Европа/Евразия: SMK (Дания), V&A (Великобритания)
+#   • Европа/Евразия: Wikidata (музеи ВСЕЙ Европы), SMK (Дания), V&A (Британия)
 #   • США: The Met (Нью-Йорк), Cleveland (Огайо)
 # Пользователь хочет соотношение ~9:1 в пользу европейских музеев/коллекций.
-EUROPEAN_PROVIDERS = [smk_candidates, vam_candidates]
+# Wikidata стоит первым: покрывает Прадо, Лувр, Уффици, Вену, Мюнхен, Ватикан и т.д.
+EUROPEAN_PROVIDERS = [wikidata_candidates, smk_candidates, vam_candidates]
 US_PROVIDERS = [met_candidates, cleveland_candidates]
 EUROPEAN_SHARE = 0.9  # доля показов из европейских музеев
 
