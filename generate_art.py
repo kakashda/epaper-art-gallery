@@ -12,7 +12,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageEnhance
 
 # ================== НАСТРОЙКИ ==================
-REFRESH_INTERVAL_MINUTES = 5
+REFRESH_INTERVAL_MINUTES = 2
 OUTPUT_WIDTH = 800      # итоговое разрешение для e-paper (ширина)
 OUTPUT_HEIGHT = 480     # итоговое разрешение для e-paper (высота)
 
@@ -154,41 +154,85 @@ def download_image_bytes(url, label="image"):
 #                    Источники изображений (провайдеры)
 # ==================================================================
 
-SEARCH_TERMS = [
-    "painting", "landscape", "portrait", "still life", "watercolor",
-    "impressionism", "flowers", "seascape", "nature", "figure",
+# Знаменитейшие европейские мастера — «светила» мировой живописи.
+# Их работы (в открытом доступе / public domain) есть в коллекциях The Met
+# и Cleveland Museum of Art. Каждый запуск выбираем случайного мастера,
+# чтобы галерея показывала самые впечатляющие европейские шедевры.
+FAMOUS_ARTISTS = [
+    "Vincent van Gogh", "Claude Monet", "Rembrandt van Rijn",
+    "Johannes Vermeer", "Pierre-Auguste Renoir", "Edgar Degas",
+    "Paul Cezanne", "Edouard Manet", "Camille Pissarro", "Paul Gauguin",
+    "Georges Seurat", "J. M. W. Turner", "Eugene Delacroix",
+    "Francisco Goya", "Diego Velazquez", "El Greco", "Titian",
+    "Raphael", "Sandro Botticelli", "Pieter Bruegel the Elder",
+    "Peter Paul Rubens", "Caravaggio", "Nicolas Poussin",
+    "Jean-Honore Fragonard", "Camille Corot", "Gustave Courbet",
+    "Jean-Francois Millet", "Anthony van Dyck", "Frans Hals",
+    "Canaletto", "Henri de Toulouse-Lautrec", "Henri Rousseau",
+    "Gustav Klimt", "Albrecht Durer", "Hans Holbein the Younger",
+    "Nicolas de Stael", "Georges de La Tour", "Jean-Baptiste-Simeon Chardin",
 ]
+
+# Резервные тематические запросы (если по конкретному мастеру ничего не нашли) —
+# тоже смещены в сторону европейской классической живописи.
+FALLBACK_TERMS = [
+    "European painting", "old master painting", "impressionism painting",
+    "baroque painting", "renaissance painting", "portrait oil painting",
+    "landscape oil painting",
+]
+
+# Европейские отделы The Met — сильно повышают шанс попасть на «светил».
+MET_EUROPEAN_DEPARTMENTS = {
+    "European Paintings",
+    "European Sculpture and Decorative Arts",
+    "Robert Lehman Collection",
+    "The Cloisters",
+    "Modern and Contemporary Art",
+    "Drawings and Prints",
+}
 
 
 def _clean_meta(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+def _is_painting(classification, medium):
+    """Похоже ли произведение на живопись (а не гравюру/фото/мебель)."""
+    text = f"{classification} {medium}".lower()
+    keywords = ("painting", "oil", "tempera", "canvas", "panel", "fresco", "живопис")
+    return any(k in text for k in keywords)
+
+
 def met_candidates():
     """Генератор кандидатов из The Metropolitan Museum of Art.
 
-    Отдаёт словари {image_url, title, artist, date, source}.
+    Ищет по имени конкретного знаменитого европейского мастера и отдаёт
+    сначала живопись, затем остальные его работы. Формат словаря:
+    {image_url, title, artist, date, source}.
     """
-    term = random.choice(SEARCH_TERMS)
+    query = random.choice(FAMOUS_ARTISTS + FALLBACK_TERMS)
     search_url = "https://collectionapi.metmuseum.org/public/collection/v1/search"
     object_url = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{}"
 
     try:
         data = fetch_json(
             search_url,
-            {"hasImages": "true", "q": term},
+            {"hasImages": "true", "q": query},
             "met-search",
         )
     except Exception as error:
-        print(f"[met] Поиск не удался: {error}")
+        print(f"[met] Поиск по '{query}' не удался: {error}")
         return
 
     object_ids = data.get("objectIDs") or []
     if not object_ids:
-        print(f"[met] Поиск по '{term}' ничего не вернул.")
+        print(f"[met] Поиск по '{query}' ничего не вернул.")
         return
 
+    print(f"[met] Запрос '{query}': найдено {len(object_ids)} объектов.")
     random.shuffle(object_ids)
+
+    deferred = []  # непейзажная живопись / прочее — отдаём во вторую очередь
 
     for i, object_id in enumerate(object_ids[:MAX_CANDIDATES], start=1):
         try:
@@ -204,7 +248,7 @@ def met_candidates():
         if not image_url:
             continue
 
-        yield {
+        candidate = {
             "image_url": image_url,
             "title": _clean_meta(obj.get("title")) or "Untitled",
             "artist": _clean_meta(obj.get("artistDisplayName")) or "Unknown artist",
@@ -212,33 +256,48 @@ def met_candidates():
             "source": "The Met",
         }
 
+        is_painting = _is_painting(obj.get("classification"), obj.get("medium"))
+        is_european = (obj.get("department") in MET_EUROPEAN_DEPARTMENTS)
+
+        # Живопись из европейских отделов — сразу, всё остальное — в резерв.
+        if is_painting and is_european:
+            yield candidate
+        else:
+            deferred.append(candidate)
+
+    for candidate in deferred:
+        yield candidate
+
 
 def cleveland_candidates():
-    """Генератор кандидатов из The Cleveland Museum of Art (Open Access, CC0)."""
-    term = random.choice(SEARCH_TERMS)
+    """Генератор кандидатов из The Cleveland Museum of Art (Open Access, CC0).
+
+    Ищет живопись конкретного европейского мастера (type=Painting).
+    """
+    query = random.choice(FAMOUS_ARTISTS + FALLBACK_TERMS)
     search_url = "https://openaccess-api.clevelandart.org/api/artworks/"
 
+    params = {
+        "q": query,
+        "has_image": 1,
+        "cc0": 1,
+        "type": "Painting",
+        "limit": 100,
+        "fields": "id,title,creators,creation_date,images,type",
+    }
+
     try:
-        data = fetch_json(
-            search_url,
-            {
-                "q": term,
-                "has_image": 1,
-                "cc0": 1,
-                "limit": 100,
-                "fields": "id,title,creators,creation_date,images",
-            },
-            "cma-search",
-        )
+        data = fetch_json(search_url, params, "cma-search")
     except Exception as error:
-        print(f"[cma] Поиск не удался: {error}")
+        print(f"[cma] Поиск по '{query}' не удался: {error}")
         return
 
     records = data.get("data") or []
     if not records:
-        print(f"[cma] Поиск по '{term}' ничего не вернул.")
+        print(f"[cma] Поиск по '{query}' (Painting) ничего не вернул.")
         return
 
+    print(f"[cma] Запрос '{query}': найдено {len(records)} картин.")
     random.shuffle(records)
 
     for record in records[:MAX_CANDIDATES]:
@@ -429,9 +488,18 @@ def create_image(artwork, image_bytes):
     x2 = x1 + box_width
     y2 = y1 + box_height
 
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=4, fill=(255, 255, 255, 230))
-    draw.text((x1 + padding_x, y1 + 5), title, font=title_font, fill=(0, 0, 0, 255))
-    draw.text((x1 + padding_x, y1 + 27), meta, font=meta_font, fill=(45, 45, 45, 255))
+    # Полупрозрачная плашка: не закрывает картину «наглухо», сквозь неё
+    # просматривается изображение. Тёмный фон + белый текст с лёгкой тенью
+    # остаются читаемыми даже поверх светлых участков картины.
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=6, fill=(0, 0, 0, 110))
+
+    # Мягкая тень под текстом — гарантирует читаемость на любом фоне.
+    shadow = (0, 0, 0, 160)
+    draw.text((x1 + padding_x + 1, y1 + 6), title, font=title_font, fill=shadow)
+    draw.text((x1 + padding_x + 1, y1 + 28), meta, font=meta_font, fill=shadow)
+
+    draw.text((x1 + padding_x, y1 + 5), title, font=title_font, fill=(255, 255, 255, 255))
+    draw.text((x1 + padding_x, y1 + 27), meta, font=meta_font, fill=(235, 235, 235, 255))
 
     composite = Image.alpha_composite(final_image.convert("RGBA"), overlay).convert("RGB")
     composite.save(OUTPUT_IMAGE, "JPEG", quality=95, optimize=True)
@@ -446,6 +514,8 @@ def write_html(version):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Страница сама перезагружается каждые 2 минуты, чтобы дисплей подхватывал свежую картину. -->
+  <meta http-equiv="refresh" content="120">
   <title>Art Gallery</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
