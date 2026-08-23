@@ -1,4 +1,6 @@
+# generate_art.py
 import io
+import math
 import os
 import random
 import re
@@ -7,12 +9,12 @@ import time
 from pathlib import Path
 
 import requests
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageEnhance
 
 # ================== НАСТРОЙКИ ==================
 REFRESH_INTERVAL_MINUTES = 5
-OUTPUT_WIDTH = 800
-OUTPUT_HEIGHT = 480
+OUTPUT_WIDTH = 800      # итоговое разрешение для e-paper (ширина)
+OUTPUT_HEIGHT = 480     # итоговое разрешение для e-paper (высота)
 
 OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
@@ -23,9 +25,16 @@ MET_SEARCH_URL = "https://collectionapi.metmuseum.org/public/collection/v1/searc
 MET_OBJECT_URL = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{object_id}"
 # ================================================
 
-HEADERS = {
+# Заголовки для API-запросов (JSON)
+API_HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; epaper-art-gallery/1.0; +https://github.com/kakashda/epaper-art-gallery)",
     "Accept": "application/json",
+}
+
+# Заголовки для скачивания изображений (image/*)
+IMG_HEADERS = {
+    "User-Agent": API_HEADERS["User-Agent"],
+    "Accept": "image/*,*/*",
 }
 
 def clean_text(value, max_length):
@@ -57,7 +66,7 @@ def should_update():
         return True
 
 def fetch_json(url, params, attempt_label):
-    response = requests.get(url, params=params, headers=HEADERS, timeout=25)
+    response = requests.get(url, params=params, headers=API_HEADERS, timeout=25)
     print(f"[{attempt_label}] GET {response.url} -> HTTP {response.status_code}")
 
     if response.status_code != 200:
@@ -94,8 +103,8 @@ def get_random_artwork():
 
     last_error = None
 
-    # Пробуем до 15 случайных объектов, пока не найдём подходящий с изображением.
-    for i, object_id in enumerate(object_ids[:15]):
+    # Пробуем до 30 случайных объектов, пока не найдём подходящий с изображением.
+    for i, object_id in enumerate(object_ids[:30]):
         try:
             obj = fetch_json(
                 MET_OBJECT_URL.format(object_id=object_id),
@@ -110,6 +119,7 @@ def get_random_artwork():
         image_url = obj.get("primaryImage")
 
         if image_url and obj.get("isPublicDomain"):
+            print(f"[attempt-{i + 1}] Выбран объект {object_id} с изображением.")
             return {
                 "image_url": image_url,
                 "title": obj.get("title") or "Untitled",
@@ -136,31 +146,33 @@ def get_font(size, bold=False):
     for font_path in candidates:
         try:
             return ImageFont.truetype(font_path, size)
-        except OSError:
+        except Exception:
             pass
 
     return ImageFont.load_default()
 
-def create_image(artwork):
-    # Для скачивания изображений используем отдельные заголовки (Accept: image/*,*/*)
-    img_headers = {
-        "User-Agent": HEADERS["User-Agent"],
-        "Accept": "image/*,*/*",
-    }
+def upscale_if_needed(img, target_w, target_h):
+    """Апскейлит изображение до покрытия целевого размера, если оно меньше."""
+    w, h = img.size
+    if w >= target_w and h >= target_h:
+        return img
 
-    image_response = requests.get(
-        artwork["image_url"],
-        headers=img_headers,
-        timeout=45,
-    )
-    print(f"[image-download] GET {artwork['image_url']} -> HTTP {image_response.status_code}")
-    image_response.raise_for_status()
+    # фактор, на который нужно увеличить, чтобы хотя бы одна сторона покрыла цель
+    factor = max(target_w / w, target_h / h)
+    new_w = max(int(math.ceil(w * factor)), target_w)
+    new_h = max(int(math.ceil(h * factor)), target_h)
 
-    source = Image.open(
-        io.BytesIO(image_response.content)
-    ).convert("RGB")
+    print(f"[upscale] исходный размер {w}x{h}, upscale -> {new_w}x{new_h} (factor {factor:.2f})")
+    return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
-    # Заполняет весь экран 800x480; края могут немного обрезаться.
+def process_image_to_canvas(source_image_bytes):
+    """Обработка исходного изображения (apscale -> fit -> overlay -> sharpen)."""
+    source = Image.open(io.BytesIO(source_image_bytes)).convert("RGB")
+
+    # Апскейлим, если исходник меньше целевого размера
+    source = upscale_if_needed(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+
+    # Кадрируем и подгоняем под целевой размер с помощью LANCZOS
     canvas = ImageOps.fit(
         source,
         (OUTPUT_WIDTH, OUTPUT_HEIGHT),
@@ -168,13 +180,40 @@ def create_image(artwork):
         centering=(0.5, 0.5),
     ).convert("RGBA")
 
+    # Применяем лёгкую коррекцию резкости и контраста
+    # Сначала UnsharpMask для повышения локальной чёткости
+    final = canvas.convert("RGB")
+    final = final.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
+
+    # Лёгкая корректировка контраста и резкости
+    try:
+        enhancer = ImageEnhance.Sharpness(final)
+        final = enhancer.enhance(1.05)  # небольшая прибавка резкости
+        contrast = ImageEnhance.Contrast(final)
+        final = contrast.enhance(1.02)
+    except Exception:
+        # если ImageEnhance недоступен — игнорируем
+        pass
+
+    return final
+
+def create_image(artwork):
+    # Скачиваем изображение с правильными заголовками
+    print(f"[image-download] GET {artwork['image_url']}")
+    image_response = requests.get(artwork["image_url"], headers=IMG_HEADERS, timeout=60)
+    print(f"[image-download] -> HTTP {image_response.status_code}")
+    image_response.raise_for_status()
+
+    final_image = process_image_to_canvas(image_response.content)
+
+    # Подложка и текстовая плашка (как и раньше) — рисуем поверх final_image
+    overlay = Image.new("RGBA", final_image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
     title = clean_text(artwork.get("title") or "Untitled", 48)
     artist = clean_text(artwork.get("artist") or "Unknown artist", 42)
     year = clean_text(artwork.get("date"), 18)
     meta = f"{artist} · {year}" if year else artist
-
-    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
 
     title_font = get_font(17, bold=True)
     meta_font = get_font(13)
@@ -203,7 +242,7 @@ def create_image(artwork):
     draw.rounded_rectangle(
         (x1, y1, x2, y2),
         radius=4,
-        fill=(255, 255, 255, 215),
+        fill=(255, 255, 255, 230),
     )
 
     draw.text(
@@ -219,8 +258,10 @@ def create_image(artwork):
         fill=(45, 45, 45, 255),
     )
 
-    final_image = Image.alpha_composite(canvas, overlay).convert("RGB")
-    final_image.save(OUTPUT_IMAGE, "JPEG", quality=92, optimize=True)
+    composite = Image.alpha_composite(final_image.convert("RGBA"), overlay).convert("RGB")
+
+    # Сохраняем с высоким качеством (меньше артефактов JPEG)
+    composite.save(OUTPUT_IMAGE, "JPEG", quality=95, optimize=False)
 
     return title, meta
 
@@ -245,6 +286,16 @@ def write_html(version):
       width: 100vw;
       height: 100vh;
       object-fit: contain;
+    }}
+    .meta {{
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      background: rgba(255,255,255,0.9);
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: #111;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
     }}
   </style>
 </head>
