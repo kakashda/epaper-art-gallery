@@ -875,24 +875,47 @@ def _apply_gamma(img, gamma):
     return img.point(lut * 3)
 
 
+def _crush_tones(img, black_thr, white_thr):
+    """«Давление» крайних тонов в ЧИСТЫЙ чёрный/белый (только PIL, без numpy).
+
+    Самый заметный источник «снега» — тёмные, но не чёрные зоны (тёмно-бордовый
+    фон, тени платья): панель Spectra 6 не умеет тёмные оттенки, поэтому дизеринг
+    собирает их из чёрного + красных/зелёных точек. Если всё, что темнее порога,
+    принудительно сделать чистым чёрным (а очень светлое — чистым белым), эти
+    точки исчезают, и картинка выглядит гораздо чище.
+    """
+    lum = img.convert("L")
+    black_mask = lum.point(lambda p: 255 if p < black_thr else 0)
+    white_mask = lum.point(lambda p: 255 if p > white_thr else 0)
+    black_img = Image.new("RGB", img.size, (0, 0, 0))
+    white_img = Image.new("RGB", img.size, (255, 255, 255))
+    img = Image.composite(black_img, img, black_mask)
+    img = Image.composite(white_img, img, white_mask)
+    return img
+
+
 def to_spectra6(rgb_image):
     """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность,
-    ПРИТЕМНЯЕТ средние тона и квантует к 6 цветам с дизерингом Флойда–Стайнберга.
+    ПРИТЕМНЯЕТ средние тона, ДАВИТ тени в чистый чёрный, слегка сглаживает и
+    квантует к 6 цветам с дизерингом Флойда–Стайнберга.
 
-    Ключ к борьбе с «белой крупой»: панель не умеет серый, поэтому средние тона
-    дизерятся смесью чёрных и БЕЛЫХ точек. Если предварительно притемнить их
-    гаммой и не осветлять, тёмные зоны уходят в чистый чёрный — белых точек в
-    тенях становится заметно меньше.
+    Борьба с «крупой» ведётся в три приёма:
+      1) гамма притемняет средние тона (меньше бело-точечной смеси);
+      2) `_crush_tones` уводит тёмные зоны в ЧИСТЫЙ чёрный — исчезает
+         красно-зелёный «снег» в тенях (самый заметный дефект);
+      3) лёгкое размытие 0.5px делает оставшийся дизеринг менее «зернистым».
 
     Возвращает RGB-изображение только из 6 цветов панели (дизеринг «вшит»)."""
     img = rgb_image.convert("RGB")
 
     try:
         img = ImageOps.autocontrast(img, cutoff=1)
-        img = _apply_gamma(img, 1.35)                   # притемняем средние тона
-        img = ImageEnhance.Color(img).enhance(1.7)      # насыщенность (цвет вместо ч/б крупы)
-        img = ImageEnhance.Contrast(img).enhance(1.15)  # контраст
-        img = ImageEnhance.Brightness(img).enhance(0.94)  # без осветления, чуть темнее
+        img = _apply_gamma(img, 1.40)                   # притемняем средние тона
+        img = ImageEnhance.Color(img).enhance(1.85)     # насыщенность (цвет вместо ч/б крупы)
+        img = ImageEnhance.Contrast(img).enhance(1.12)  # контраст
+        img = ImageEnhance.Brightness(img).enhance(0.93)  # без осветления, чуть темнее
+        img = _crush_tones(img, black_thr=55, white_thr=240)  # тени -> чистый чёрный
+        img = img.filter(ImageFilter.GaussianBlur(0.5))  # мягче зерно дизеринга
     except Exception:
         pass
 
