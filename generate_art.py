@@ -54,6 +54,7 @@ HTTP_TIMEOUT = 30
 MAX_RETRIES = 3          # число повторов на один HTTP-запрос
 RETRY_BACKOFF = 2.0      # базовая задержка между повторами (секунды)
 MAX_CANDIDATES = 25      # сколько объектов пробуем у одного источника
+EURO_QUERY_ATTEMPTS = 8  # сколько художников перебирает европейский источник, пока не найдёт картины
 MIN_IMAGE_BYTES = 5000   # меньший размер почти наверняка означает страницу-ошибку
 # ================================================
 
@@ -362,9 +363,139 @@ def cleveland_candidates():
         }
 
 
-# Порядок провайдеров перемешиваем для разнообразия, но обходим все,
-# пока не получим годное изображение.
-PROVIDERS = [met_candidates, cleveland_candidates]
+def smk_candidates():
+    """Генератор кандидатов из SMK — Statens Museum for Kunst (Копенгаген, Дания).
+
+    Национальная галерея Дании, коллекция в открытом доступе (public domain).
+    Это РЕАЛЬНО европейский музей (в отличие от The Met / Cleveland в США).
+    """
+    search_url = "https://api.smk.dk/api/v1/art/search/"
+    # SMK — датский музей, держит не каждого мастера. Перебираем несколько
+    # художников, пока не найдём картины, чтобы европейский источник почти
+    # всегда что-то отдавал (и соотношение 9:1 реально соблюдалось).
+    queries = random.sample(FAMOUS_ARTISTS, min(EURO_QUERY_ATTEMPTS, len(FAMOUS_ARTISTS)))
+    items = []
+    for query in queries:
+        params = {
+            "keys": query,
+            "filters": "[has_image:true],[public_domain:true],[object_names:maleri]",
+            "fields": "titles,image_native,artist,production_date,techniques",
+            "rows": 100,
+            "offset": 0,
+        }
+        try:
+            data = fetch_json(search_url, params, "smk-search")
+        except Exception as error:
+            print(f"[smk] Поиск по '{query}' не удался: {error}")
+            continue
+        items = data.get("items") or []
+        if items:
+            print(f"[smk] Запрос '{query}': найдено {len(items)} картин.")
+            break
+        print(f"[smk] Поиск по '{query}' (maleri) ничего не вернул.")
+
+    if not items:
+        return
+
+    random.shuffle(items)
+
+    for item in items[:MAX_CANDIDATES]:
+        image_url = item.get("image_native")
+        if not image_url:
+            continue
+
+        titles = item.get("titles") or []
+        title = _clean_meta(titles[0].get("title")) if titles else ""
+
+        artists = item.get("artist") or []
+        artist = _clean_meta(artists[0]) if artists else "Unknown artist"
+
+        date = ""
+        prod = item.get("production_date") or []
+        if prod:
+            date = _clean_meta(prod[0].get("period"))
+
+        techniques = item.get("techniques") or []
+        medium = _clean_meta(techniques[0]) if techniques else ""
+
+        yield {
+            "image_url": image_url,
+            "title": title or "Untitled",
+            "artist": artist or "Unknown artist",
+            "date": date,
+            "medium": medium,
+            "culture": "",
+            "source": "SMK — National Gallery of Denmark",
+        }
+
+
+def vam_candidates():
+    """Генератор кандидатов из Victoria and Albert Museum (Лондон, Великобритания).
+
+    Крупнейший европейский музей искусства и дизайна. Фильтруем строго до
+    масляной живописи (kw_object_type=Oil painting), чтобы не попадали
+    репродукции и печатная графика.
+    """
+    search_url = "https://api.vam.ac.uk/v2/objects/search"
+    # Перебираем нескольких мастеров, пока не найдём масляную живопись.
+    queries = random.sample(FAMOUS_ARTISTS, min(EURO_QUERY_ATTEMPTS, len(FAMOUS_ARTISTS)))
+    records = []
+    for query in queries:
+        params = {
+            "q": query,
+            "kw_object_type": "Oil painting",
+            "images_exist": 1,
+            "page_size": 100,
+            "page": 1,
+        }
+        try:
+            data = fetch_json(search_url, params, "vam-search")
+        except Exception as error:
+            print(f"[vam] Поиск по '{query}' не удался: {error}")
+            continue
+        records = data.get("records") or []
+        if records:
+            print(f"[vam] Запрос '{query}': найдено {len(records)} картин.")
+            break
+        print(f"[vam] Поиск по '{query}' (Oil painting) ничего не вернул.")
+
+    if not records:
+        return
+
+    random.shuffle(records)
+
+    for rec in records[:MAX_CANDIDATES]:
+        images = rec.get("_images") or {}
+        base = images.get("_iiif_image_base_url")
+        if not base:
+            continue
+        # IIIF: вписываем в 2000px по большей стороне — хорошее качество для 4K-версии.
+        image_url = base.rstrip("/") + "/full/!2000,2000/0/default.jpg"
+
+        maker = rec.get("_primaryMaker") or {}
+        artist = _clean_meta(maker.get("name")) or "Unknown artist"
+
+        yield {
+            "image_url": image_url,
+            "title": _clean_meta(rec.get("_primaryTitle")) or "Untitled",
+            "artist": artist,
+            "date": _clean_meta(rec.get("_primaryDate")),
+            "medium": "oil painting",
+            "culture": _clean_meta(rec.get("_primaryPlace")),
+            "source": "Victoria and Albert Museum",
+        }
+
+
+# Провайдеры разбиты по ГЕОГРАФИИ музея (а не по происхождению картины):
+#   • Европа/Евразия: SMK (Дания), V&A (Великобритания)
+#   • США: The Met (Нью-Йорк), Cleveland (Огайо)
+# Пользователь хочет соотношение ~9:1 в пользу европейских музеев/коллекций.
+EUROPEAN_PROVIDERS = [smk_candidates, vam_candidates]
+US_PROVIDERS = [met_candidates, cleveland_candidates]
+EUROPEAN_SHARE = 0.9  # доля показов из европейских музеев
+
+# Обратная совместимость: полный список источников.
+PROVIDERS = EUROPEAN_PROVIDERS + US_PROVIDERS
 
 
 def get_random_artwork_bytes():
@@ -373,8 +504,20 @@ def get_random_artwork_bytes():
     Устойчив к 403/406 и прочим ошибкам: пропускает проблемные кандидаты
     и переходит к следующему источнику.
     """
-    providers = PROVIDERS[:]
-    random.shuffle(providers)
+    # Взвешенный выбор ~9:1 в пользу европейских музеев. Сначала пробуем
+    # выбранную по жребию группу, затем — вторую как резерв (чтобы экран
+    # никогда не остался пустым, если европейские API временно недоступны).
+    euro = EUROPEAN_PROVIDERS[:]
+    us = US_PROVIDERS[:]
+    random.shuffle(euro)
+    random.shuffle(us)
+
+    if random.random() < EUROPEAN_SHARE:
+        providers = euro + us
+        print(f"[выбор] Приоритет: европейские музеи (доля {EUROPEAN_SHARE:.0%})")
+    else:
+        providers = us + euro
+        print(f"[выбор] Приоритет: музеи США (доля {1 - EUROPEAN_SHARE:.0%})")
 
     last_error = None
     tried = 0
