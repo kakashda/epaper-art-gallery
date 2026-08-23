@@ -595,25 +595,36 @@ def _build_palette_image():
     return pal_img
 
 
-def to_spectra6(rgb_image):
-    """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность
-    и квантует к 6 цветам с дизерингом Флойда–Стайнберга.
+def _apply_gamma(img, gamma):
+    """Гамма-коррекция через LUT. gamma>1 — притемняет средние тона."""
+    if gamma == 1.0:
+        return img
+    lut = [min(255, int((i / 255.0) ** gamma * 255 + 0.5)) for i in range(256)]
+    return img.point(lut * 3)
 
-    Возвращает RGB-изображение, где присутствуют только 6 цветов панели
-    (готово к показу; дизеринг уже «вшит» в пиксели)."""
+
+def to_spectra6(rgb_image):
+    """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность,
+    ПРИТЕМНЯЕТ средние тона и квантует к 6 цветам с дизерингом Флойда–Стайнберга.
+
+    Ключ к борьбе с «белой крупой»: панель не умеет серый, поэтому средние тона
+    дизерятся смесью чёрных и БЕЛЫХ точек. Если предварительно притемнить их
+    гаммой и не осветлять, тёмные зоны уходят в чистый чёрный — белых точек в
+    тенях становится заметно меньше.
+
+    Возвращает RGB-изображение только из 6 цветов панели (дизеринг «вшит»)."""
     img = rgb_image.convert("RGB")
 
-    # E-paper блёклый и с узкой гаммой — предварительно «пережимаем» картинку,
-    # иначе почти всё уйдёт в мутный чёрно-белый шум.
     try:
         img = ImageOps.autocontrast(img, cutoff=1)
-        img = ImageEnhance.Color(img).enhance(1.6)      # насыщенность
-        img = ImageEnhance.Contrast(img).enhance(1.18)  # контраст
-        img = ImageEnhance.Brightness(img).enhance(1.03)
+        img = _apply_gamma(img, 1.35)                   # притемняем средние тона
+        img = ImageEnhance.Color(img).enhance(1.7)      # насыщенность (цвет вместо ч/б крупы)
+        img = ImageEnhance.Contrast(img).enhance(1.15)  # контраст
+        img = ImageEnhance.Brightness(img).enhance(0.94)  # без осветления, чуть темнее
     except Exception:
         pass
 
-    # Квантование к нашей палитре с дизерингом Флойда–Стайнберга (dither=FLOYDSTEINBERG).
+    # Квантование к нашей палитре с дизерингом Флойда–Стайнберга.
     palette_img = _build_palette_image()
     quantized = img.quantize(
         palette=palette_img,
