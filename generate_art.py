@@ -19,8 +19,6 @@ OUTPUT_HTML = "index.html"
 LAST_UPDATE_FILE = "last_update.txt"
 
 # The Metropolitan Museum of Art Collection API
-# (сайт artic.edu заблокировал раздачу изображений через Cloudflare bot-protection,
-#  поэтому используем Met Museum — их API открыт и без такой защиты)
 MET_SEARCH_URL = "https://collectionapi.metmuseum.org/public/collection/v1/search"
 MET_OBJECT_URL = "https://collectionapi.metmuseum.org/public/collection/v1/objects/{object_id}"
 # ================================================
@@ -72,7 +70,6 @@ def fetch_json(url, params, attempt_label):
         print(f"[{attempt_label}] Ответ не является валидным JSON: {response.text[:500]}")
         raise RuntimeError(f"Некорректный JSON от API: {error}") from error
 
-# Список общих поисковых слов, чтобы получать разнообразные картины
 SEARCH_TERMS = [
     "painting", "landscape", "portrait", "still life", "watercolor",
     "drawing", "print", "sculpture", "art", "impressionism",
@@ -145,11 +142,18 @@ def get_font(size, bold=False):
     return ImageFont.load_default()
 
 def create_image(artwork):
+    # Для скачивания изображений используем отдельные заголовки (Accept: image/*,*/*)
+    img_headers = {
+        "User-Agent": HEADERS["User-Agent"],
+        "Accept": "image/*,*/*",
+    }
+
     image_response = requests.get(
         artwork["image_url"],
-        headers=HEADERS,
+        headers=img_headers,
         timeout=45,
     )
+    print(f"[image-download] GET {artwork['image_url']} -> HTTP {image_response.status_code}")
     image_response.raise_for_status()
 
     source = Image.open(
@@ -196,7 +200,6 @@ def create_image(artwork):
     x2 = x1 + box_width
     y2 = y1 + box_height
 
-    # Маленькая светлая плашка — не перекрывает значительную часть картины.
     draw.rounded_rectangle(
         (x1, y1, x2, y2),
         radius=4,
