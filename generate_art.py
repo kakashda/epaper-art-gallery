@@ -13,8 +13,21 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter, ImageEnhance
 
 # ================== НАСТРОЙКИ ==================
 REFRESH_INTERVAL_MINUTES = 2
-OUTPUT_WIDTH = 800      # итоговое разрешение для e-paper (ширина)
-OUTPUT_HEIGHT = 480     # итоговое разрешение для e-paper (высота)
+
+# Базовое разрешение e-paper (соотношение сторон 5:3). Все остальные форматы
+# используют это же соотношение, поэтому кадрирование одинаковое — меняется
+# только чёткость/размер.
+OUTPUT_WIDTH = 800
+OUTPUT_HEIGHT = 480
+
+# Набор выходных файлов: (имя_файла, ширина, высота).
+# current.jpg — по умолчанию (как раньше), остальные — крупнее, вплоть до 4K.
+OUTPUT_SIZES = [
+    ("current.jpg", 800, 480),      # по умолчанию (e-paper)
+    ("current_1600.jpg", 1600, 960),   # 2x — HD
+    ("current_2560.jpg", 2560, 1536),  # ~1440p
+    ("current_3840.jpg", 3840, 2304),  # ~4K
+]
 
 OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
@@ -253,6 +266,8 @@ def met_candidates():
             "title": _clean_meta(obj.get("title")) or "Untitled",
             "artist": _clean_meta(obj.get("artistDisplayName")) or "Unknown artist",
             "date": _clean_meta(obj.get("objectDate")),
+            "medium": _clean_meta(obj.get("medium")),
+            "culture": _clean_meta(obj.get("culture")),
             "source": "The Met",
         }
 
@@ -283,7 +298,7 @@ def cleveland_candidates():
         "cc0": 1,
         "type": "Painting",
         "limit": 100,
-        "fields": "id,title,creators,creation_date,images,type",
+        "fields": "id,title,creators,creation_date,images,type,technique,culture",
     }
 
     try:
@@ -325,6 +340,8 @@ def cleveland_candidates():
             "title": _clean_meta(record.get("title")) or "Untitled",
             "artist": artist,
             "date": _clean_meta(record.get("creation_date")),
+            "medium": _clean_meta(record.get("technique")),
+            "culture": _clean_meta(record.get("culture")),
             "source": "Cleveland Museum of Art",
         }
 
@@ -432,17 +449,16 @@ def upscale_if_needed(img, target_w, target_h):
     return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
 
-def process_image_to_canvas(source_image_bytes):
-    """Обработка исходного изображения (upscale -> fit -> sharpen)."""
-    source = Image.open(io.BytesIO(source_image_bytes))
-    # Корректно обрабатываем ориентацию по EXIF и любые цветовые режимы.
-    source = ImageOps.exif_transpose(source).convert("RGB")
+def process_image_to_canvas(source, target_w, target_h):
+    """Готовит кадр заданного разрешения (upscale -> fit -> sharpen).
 
-    source = upscale_if_needed(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+    `source` — уже открытое и приведённое к RGB изображение (PIL.Image).
+    """
+    prepared = upscale_if_needed(source, target_w, target_h)
 
     canvas = ImageOps.fit(
-        source,
-        (OUTPUT_WIDTH, OUTPUT_HEIGHT),
+        prepared,
+        (target_w, target_h),
         method=Image.Resampling.LANCZOS,
         centering=(0.5, 0.5),
     ).convert("RGB")
@@ -459,51 +475,116 @@ def process_image_to_canvas(source_image_bytes):
     return final
 
 
-def create_image(artwork, image_bytes):
-    final_image = process_image_to_canvas(image_bytes)
+def build_caption_lines(artwork):
+    """Собирает строки подписи: название, автор·год, техника·музей.
 
-    overlay = Image.new("RGBA", final_image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    title = clean_text(artwork.get("title") or "Untitled", 48)
-    artist = clean_text(artwork.get("artist") or "Unknown artist", 42)
-    year = clean_text(artwork.get("date"), 18)
+    Возвращает список кортежей (kind, text), где kind — 'title'|'meta'|'desc'.
+    """
+    title = clean_text(artwork.get("title") or "Untitled", 72)
+    artist = clean_text(artwork.get("artist") or "Unknown artist", 56)
+    year = clean_text(artwork.get("date"), 24)
     meta = f"{artist} · {year}" if year else artist
 
-    title_font = get_font(17, bold=True)
-    meta_font = get_font(13)
+    # Третья строка — «описание»: техника/материал (или культура) + музей.
+    medium = clean_text(artwork.get("medium"), 64)
+    culture = clean_text(artwork.get("culture"), 40)
+    source = clean_text(artwork.get("source"), 40)
 
-    padding_x = 10
-    margin = 10
-    box_height = 48
+    desc_parts = []
+    if medium:
+        desc_parts.append(medium)
+    elif culture:
+        desc_parts.append(culture)
+    if source:
+        desc_parts.append(source)
+    desc = " · ".join(desc_parts)
 
-    title_box = draw.textbbox((0, 0), title, font=title_font)
-    meta_box = draw.textbbox((0, 0), meta, font=meta_font)
+    lines = [("title", title), ("meta", meta)]
+    if desc:
+        lines.append(("desc", desc))
+    return lines
 
-    text_width = max(title_box[2] - title_box[0], meta_box[2] - meta_box[0])
-    box_width = min(text_width + padding_x * 2, int(OUTPUT_WIDTH * 0.62))
 
+def draw_caption(image, lines, scale):
+    """Рисует полупрозрачную плашку с подписью, масштабируя всё под разрешение.
+
+    `scale` = высота_кадра / базовая_высота (480). Шрифты, отступы и радиус
+    скругления умножаются на scale, чтобы плашка выглядела одинаково на всех
+    форматах — от 800x480 до 4K.
+    """
+    image = image.convert("RGBA")
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    W, H = image.size
+
+    margin = max(int(round(10 * scale)), 8)
+    pad_x = max(int(round(12 * scale)), 8)
+    pad_y = max(int(round(9 * scale)), 6)
+    gap = max(int(round(5 * scale)), 3)
+    radius = max(int(round(6 * scale)), 4)
+    shadow_off = max(int(round(scale)), 1)
+
+    fonts = {
+        "title": get_font(max(int(round(20 * scale)), 12), bold=True),
+        "meta": get_font(max(int(round(15 * scale)), 10)),
+        "desc": get_font(max(int(round(13 * scale)), 9)),
+    }
+
+    # Замеряем каждую строку.
+    measured = []
+    max_text_w = 0
+    total_h = 0
+    for kind, text in lines:
+        font = fonts[kind]
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        measured.append((kind, text, font, text_w, text_h, bbox[1]))
+        max_text_w = max(max_text_w, text_w)
+        total_h += text_h
+    total_h += gap * (len(measured) - 1)
+
+    box_w = min(max_text_w + pad_x * 2, int(W * 0.72))
+    box_h = total_h + pad_y * 2
     x1 = margin
-    y1 = OUTPUT_HEIGHT - box_height - margin
-    x2 = x1 + box_width
-    y2 = y1 + box_height
+    y1 = H - box_h - margin
+    x2 = x1 + box_w
+    y2 = y1 + box_h
 
-    # Полупрозрачная плашка: не закрывает картину «наглухо», сквозь неё
-    # просматривается изображение. Тёмный фон + белый текст с лёгкой тенью
-    # остаются читаемыми даже поверх светлых участков картины.
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=6, fill=(0, 0, 0, 110))
+    # Полупрозрачная плашка — картина просматривается сквозь неё.
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 110))
 
-    # Мягкая тень под текстом — гарантирует читаемость на любом фоне.
-    shadow = (0, 0, 0, 160)
-    draw.text((x1 + padding_x + 1, y1 + 6), title, font=title_font, fill=shadow)
-    draw.text((x1 + padding_x + 1, y1 + 28), meta, font=meta_font, fill=shadow)
+    shadow = (0, 0, 0, 170)
+    cursor_y = y1 + pad_y
+    for kind, text, font, _tw, text_h, top in measured:
+        text_x = x1 + pad_x
+        text_y = cursor_y - top  # выравниваем реальный верх глифов по cursor_y
+        fill = (255, 255, 255, 255) if kind == "title" else (232, 232, 232, 255)
+        draw.text((text_x + shadow_off, text_y + shadow_off), text, font=font, fill=shadow)
+        draw.text((text_x, text_y), text, font=font, fill=fill)
+        cursor_y += text_h + gap
 
-    draw.text((x1 + padding_x, y1 + 5), title, font=title_font, fill=(255, 255, 255, 255))
-    draw.text((x1 + padding_x, y1 + 27), meta, font=meta_font, fill=(235, 235, 235, 255))
+    return Image.alpha_composite(image, overlay).convert("RGB")
 
-    composite = Image.alpha_composite(final_image.convert("RGBA"), overlay).convert("RGB")
-    composite.save(OUTPUT_IMAGE, "JPEG", quality=95, optimize=True)
 
+def create_image(artwork, image_bytes):
+    """Генерирует все форматы из OUTPUT_SIZES с одинаковым содержимым."""
+    source = Image.open(io.BytesIO(image_bytes))
+    # Корректно обрабатываем ориентацию по EXIF и любые цветовые режимы.
+    source = ImageOps.exif_transpose(source).convert("RGB")
+
+    lines = build_caption_lines(artwork)
+
+    for filename, width, height in OUTPUT_SIZES:
+        canvas = process_image_to_canvas(source, width, height)
+        composite = draw_caption(canvas, lines, scale=height / OUTPUT_HEIGHT)
+        quality = 95 if filename == OUTPUT_IMAGE else 90
+        composite.save(filename, "JPEG", quality=quality, optimize=True)
+        print(f"[save] {filename}: {width}x{height} (q{quality})")
+
+    # Для лога/возврата — читабельные строки.
+    title = lines[0][1]
+    meta = lines[1][1] if len(lines) > 1 else ""
     return title, meta
 
 
