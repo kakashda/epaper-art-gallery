@@ -24,7 +24,8 @@ AIC_IIIF = "https://www.artic.edu/iiif/2/{image_id}/full/843,/0/default.jpg"
 # ================================================
 
 HEADERS = {
-    "User-Agent": "epaper-art-gallery/1.0"
+    "User-Agent": "Mozilla/5.0 (compatible; epaper-art-gallery/1.0; +https://github.com/kakashda/epaper-art-gallery)",
+    "Accept": "application/json",
 }
 
 def clean_text(value, max_length):
@@ -64,52 +65,66 @@ def should_update():
     except Exception:
         return True
 
-def get_random_artwork():
-    """Получает случайную работу с изображением из каталога Art Institute of Chicago."""
-    # ВАЖНО: total_pages считаем с тем же limit=100, что и в основном запросе,
-    # иначе номер случайной страницы выходит далеко за пределы реального каталога.
-    first_response = requests.get(
-        AIC_API,
-        params={
-            "page": 1,
-            "limit": 100,
-            "fields": "id",
-        },
-        headers=HEADERS,
-        timeout=20,
-    )
-    first_response.raise_for_status()
+def fetch_json(params, attempt_label):
+    """Делает запрос и подробно логирует ответ в случае проблем."""
+    response = requests.get(AIC_API, params=params, headers=HEADERS, timeout=25)
 
-    pagination = first_response.json().get("pagination", {})
-    total_pages = int(pagination.get("total_pages", 1))
+    print(f"[{attempt_label}] GET {response.url} -> HTTP {response.status_code}")
 
-    # Некоторые записи не имеют изображения: пробуем до 12 страниц.
-    for _ in range(12):
-        page = random.randint(1, max(1, total_pages))
-
-        response = requests.get(
-            AIC_API,
-            params={
-                "page": page,
-                "limit": 100,
-                "fields": "id,title,artist_display,date_display,image_id",
-            },
-            headers=HEADERS,
-            timeout=20,
-        )
+    if response.status_code != 200:
+        print(f"[{attempt_label}] Тело ответа (первые 500 символов): {response.text[:500]}")
         response.raise_for_status()
 
-        candidates = [
-            item
-            for item in response.json().get("data", [])
-            if item.get("image_id")
-        ]
+    try:
+        return response.json()
+    except ValueError as error:
+        print(f"[{attempt_label}] Ответ не является валидным JSON: {response.text[:500]}")
+        raise RuntimeError(f"Некорректный JSON от API: {error}") from error
+
+def get_random_artwork():
+    """Получает случайную работу с изображением из каталога Art Institute of Chicago."""
+    first_data = fetch_json(
+        {"page": 1, "limit": 100, "fields": "id"},
+        "pagination-check",
+    )
+
+    pagination = first_data.get("pagination", {})
+    total_pages = int(pagination.get("total_pages", 1))
+    print(f"Всего страниц (limit=100): {total_pages}")
+
+    last_error = None
+
+    # Некоторые записи не имеют изображения: пробуем несколько раз.
+    for i in range(12):
+        page = random.randint(1, max(1, total_pages))
+
+        try:
+            data = fetch_json(
+                {
+                    "page": page,
+                    "limit": 100,
+                    "fields": "id,title,artist_display,date_display,image_id",
+                },
+                f"attempt-{i + 1} (page {page})",
+            )
+        except Exception as error:
+            print(f"[attempt-{i + 1}] Ошибка запроса: {error}")
+            last_error = error
+            time.sleep(1.5)
+            continue
+
+        items = data.get("data", [])
+        candidates = [item for item in items if item.get("image_id")]
+
+        print(f"[attempt-{i + 1}] Получено записей: {len(items)}, с изображением: {len(candidates)}")
 
         if candidates:
             return random.choice(candidates)
 
+        time.sleep(0.5)
+
     raise RuntimeError(
-        "Не удалось получить запись с изображением из каталога."
+        f"Не удалось получить запись с изображением из каталога. Последняя ошибка: {last_error}"
     )
 
 def get_font(size, bold=False):
