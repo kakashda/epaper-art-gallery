@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Random Art for ePaper</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      overflow: hidden;
+    }
+    #container {
+      display: flex;
+      flex-direction: row;
+      width: 100vw;
+      height: 100vh;
+      padding: 10px;
+      gap: 12px;
+    }
+    #image-box {
+      flex: 1 1 55%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #art-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    #info-box {
+      flex: 1 1 45%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 8px;
+      overflow: hidden;
+    }
+    #title {
+      font-size: 20px;
+      font-weight: bold;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+    #artist {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    #details {
+      font-size: 13px;
+      color: #333333;
+      margin-bottom: 10px;
+    }
+    #description {
+      font-size: 13px;
+      line-height: 1.35;
+      color: #111111;
+      display: -webkit-box;
+      -webkit-line-clamp: 7;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    #status {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="status">Загрузка картины...</div>
+  <div id="container" style="display: none;">
+    <div id="image-box">
+      <img id="art-image" alt="Картина">
+    </div>
+    <div id="info-box">
+      <div id="title"></div>
+      <div id="artist"></div>
+      <div id="details"></div>
+      <div id="description"></div>
+    </div>
+  </div>
+
+  <script>
+    async function fetchArt() {
+      try {
+        const randPage = Math.floor(Math.random() * 80) + 1;
+        const apiUrl = `https://api.artic.edu/api/v1/artworks/search?q=painting&query[term][is_public_domain]=true&query[term][artwork_type_id]=1&fields=id,title,artist_display,date_display,medium_display,image_id,description,short_description&page=${randPage}&limit=12`;
+        
+        const resp = await fetch(apiUrl);
+        const data = await resp.json();
+        const items = (data.data || []).filter(i => i.image_id);
+        
+        if (!items.length) throw new Error('No items');
+
+        const artwork = items[Math.floor(Math.random() * items.length)];
+        const imgUrl = `https://www.artic.edu/iiif/2/${artwork.image_id}/full/450,/default.jpg`;
+
+        document.getElementById('title').textContent = artwork.title || 'Без названия';
+        document.getElementById('artist').textContent = artwork.artist_display || 'Неизвестный автор';
+        document.getElementById('details').textContent = [artwork.date_display, artwork.medium_display].filter(Boolean).join(' • ');
+
+        let rawDesc = artwork.short_description || artwork.description || '';
+        const temp = document.createElement('div');
+        temp.innerHTML = rawDesc;
+        document.getElementById('description').textContent = temp.textContent || temp.innerText || '';
+
+        const img = document.getElementById('art-image');
+        img.onload = () => {
+          document.getElementById('status').style.display = 'none';
+          img.style.display = 'block';
+          document.getElementById('container').style.display = 'flex';
+        };
+        img.onerror = () => {
+          document.getElementById('status').textContent = 'Ошибка загрузки изображения.';
+        };
+        img.src = imgUrl;
+      } catch (e) {
+        document.getElementById('status').textContent = 'Ошибка загрузки данных.';
+      }
+    }
+
+    fetchArt();
+  </script>
+</body>
+</html>
