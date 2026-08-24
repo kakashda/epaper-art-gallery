@@ -48,6 +48,8 @@ OUTPUT_SIZES = [
 OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
 LAST_UPDATE_FILE = "last_update.txt"
+MUSEUM_HISTORY_FILE = "museum_history.txt"  # список последних показанных музеев
+MUSEUM_HISTORY_SIZE = 8  # не повторять музей, если он был в последних N показах
 
 # Сетевые параметры
 HTTP_TIMEOUT = 30
@@ -627,15 +629,50 @@ EUROPEAN_SHARE = 0.9  # доля показов из европейских му
 PROVIDERS = EUROPEAN_PROVIDERS + US_PROVIDERS
 
 
+def _museum_key(source):
+    """Нормализует название музея для сравнения в истории.
+
+    Для Wikidata `source` = «Музей, Страна» — берём часть до запятой, чтобы
+    ключом был сам музей, а не связка музей+страна.
+    """
+    text = str(source or "").strip()
+    text = text.split(",")[0].strip()          # «Prado, Spain» -> «Prado»
+    text = re.sub(r"\s+", " ", text).lower()
+    return text
+
+
+def load_recent_museums():
+    """Читает список недавно показанных музеев (ключи), старые — первыми."""
+    try:
+        lines = Path(MUSEUM_HISTORY_FILE).read_text(encoding="utf-8").splitlines()
+        return [ln.strip() for ln in lines if ln.strip()]
+    except Exception:
+        return []
+
+
+def save_recent_museum(source):
+    """Добавляет музей в историю и подрезает её до MUSEUM_HISTORY_SIZE."""
+    history = load_recent_museums()
+    history.append(_museum_key(source))
+    history = history[-MUSEUM_HISTORY_SIZE:]
+    try:
+        Path(MUSEUM_HISTORY_FILE).write_text("\n".join(history) + "\n", encoding="utf-8")
+    except Exception as error:
+        print(f"[history] не удалось сохранить историю музеев: {error}")
+
+
 def get_random_artwork_bytes():
     """Пробует источники по очереди и возвращает (artwork_dict, image_bytes).
 
-    Устойчив к 403/406 и прочим ошибкам: пропускает проблемные кандидаты
-    и переходит к следующему источнику.
+    Справедливое распределение: музей, показанный в последних
+    MUSEUM_HISTORY_SIZE картинах, пропускается — так один и тот же музей
+    (например, SMK или Met) не идёт подряд/через один, и картины равномерно
+    чередуются между разными музеями Европы и США.
+
+    Устойчивость: если ВСЕ доступные кандидаты оказались из недавних музеев
+    (например, временно работает только один источник), второй проход
+    игнорирует историю, чтобы экран никогда не остался пустым.
     """
-    # Взвешенный выбор ~9:1 в пользу европейских музеев. Сначала пробуем
-    # выбранную по жребию группу, затем — вторую как резерв (чтобы экран
-    # никогда не остался пустым, если европейские API временно недоступны).
     euro = EUROPEAN_PROVIDERS[:]
     us = US_PROVIDERS[:]
     random.shuffle(euro)
@@ -648,24 +685,35 @@ def get_random_artwork_bytes():
         providers = us + euro
         print(f"[выбор] Приоритет: музеи США (доля {1 - EUROPEAN_SHARE:.0%})")
 
+    recent = set(load_recent_museums())
+    print(f"[выбор] Недавние музеи (пропускаются): {sorted(recent) or '—'}")
+
     last_error = None
     tried = 0
 
-    for provider in providers:
-        print(f"\n=== Источник: {provider.__name__} ===")
-        for artwork in provider():
-            tried += 1
-            try:
-                image_bytes = download_image_bytes(
-                    artwork["image_url"], label=f"download ({artwork['source']})"
-                )
-                print(f"[ok] Изображение получено из {artwork['source']}: "
-                      f"{artwork['title']} ({len(image_bytes)} байт)")
-                return artwork, image_bytes
-            except Exception as error:
-                last_error = error
-                print(f"[skip] {artwork['source']} — {error}")
-                continue
+    # Проход 1 — только «свежие» музеи; проход 2 — резерв без учёта истории.
+    for enforce_fairness in (True, False):
+        if not enforce_fairness:
+            print("\n[выбор] Свежих музеев не нашлось — резервный проход без фильтра истории.")
+        for provider in providers:
+            print(f"\n=== Источник: {provider.__name__} (fairness={enforce_fairness}) ===")
+            for artwork in provider():
+                if enforce_fairness and _museum_key(artwork["source"]) in recent:
+                    print(f"[fair-skip] {artwork['source']} — недавно показан")
+                    continue
+                tried += 1
+                try:
+                    image_bytes = download_image_bytes(
+                        artwork["image_url"], label=f"download ({artwork['source']})"
+                    )
+                    print(f"[ok] Изображение получено из {artwork['source']}: "
+                          f"{artwork['title']} ({len(image_bytes)} байт)")
+                    save_recent_museum(artwork["source"])
+                    return artwork, image_bytes
+                except Exception as error:
+                    last_error = error
+                    print(f"[skip] {artwork['source']} — {error}")
+                    continue
 
     raise RuntimeError(
         f"Не удалось получить изображение ни из одного источника "
@@ -738,18 +786,30 @@ def upscale_if_needed(img, target_w, target_h):
 
 
 def process_image_to_canvas(source, target_w, target_h):
-    """Готовит кадр заданного разрешения (upscale -> fit -> sharpen).
+    """Готовит кадр заданного разрешения БЕЗ обрезки (contain + поля).
+
+    Раньше использовался `ImageOps.fit`, который ОБРЕЗАЛ картину под пропорции
+    экрана (5:3) — у портретных и квадратных полотен терялись верх и низ.
+    Теперь картина вписывается ЦЕЛИКОМ: масштабируется по меньшему коэффициенту,
+    а свободное место заполняется чёрными полями (чёрный — родной цвет панели
+    Spectra 6, поэтому поля выглядят аккуратно и не дизерятся).
 
     `source` — уже открытое и приведённое к RGB изображение (PIL.Image).
     """
-    prepared = upscale_if_needed(source, target_w, target_h)
+    src = source.convert("RGB")
+    w, h = src.size
 
-    canvas = ImageOps.fit(
-        prepared,
-        (target_w, target_h),
-        method=Image.Resampling.LANCZOS,
-        centering=(0.5, 0.5),
-    ).convert("RGB")
+    # Масштаб «вписать целиком»: по меньшему коэффициенту, чтобы всё поместилось.
+    factor = min(target_w / w, target_h / h)
+    new_w = max(1, int(round(w * factor)))
+    new_h = max(1, int(round(h * factor)))
+    resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
+
+    # Чёрный холст целевого размера, картина по центру (letterbox / pillarbox).
+    canvas = Image.new("RGB", (target_w, target_h), (0, 0, 0))
+    off_x = (target_w - new_w) // 2
+    off_y = (target_h - new_h) // 2
+    canvas.paste(resized, (off_x, off_y))
 
     # Повышаем локальную чёткость и слегка контраст — лучше смотрится на e-paper.
     final = canvas.filter(ImageFilter.UnsharpMask(radius=1.2, percent=130, threshold=3))
