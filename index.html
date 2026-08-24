@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Запрет кеширования — браузер ВСЕГДА загружает свежую версию -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <!-- Страница сама перезагружается каждые 2 минуты, чтобы дисплей подхватывал свежую картину. -->
   <meta http-equiv="refresh" content="120">
   <title>Art Gallery</title>
@@ -23,6 +27,10 @@
   </style>
 </head>
 <body>
-  <img src="current.jpg?v=1787562452" alt="Artwork">
+  <img id="artwork" alt="Artwork">
+  <script>
+    // Добавляем timestamp к URL изображения, чтобы браузер НЕ использовал кеш
+    document.getElementById('artwork').src = 'current.jpg?t=' + Date.now();
+  </script>
 </body>
 </html>
