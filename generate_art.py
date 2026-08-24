@@ -242,6 +242,13 @@ ARTIST_QIDS = {
     "Q5592": "Michelangelo", "Q102272": "Jan van Eyck",
     "Q130531": "Hieronymus Bosch", "Q7814": "Giotto",
     "Q205863": "Jan Steen", "Q470551": "Nicolas de Stael",
+    # Мистические/фантастические художники (для "адских сюжетов", видений, монстров)
+    "Q41513": "William Blake",           # видения, Апокалипсис, мистика
+    "Q154349": "Odilon Redon",          # символизм, монстры, фантазия
+    "Q122382": "Henry Fuseli",          # "Кошмар", демоны
+    "Q7751": "Giuseppe Arcimboldo",     # головы из фруктов/рыб, маньеризм
+    "Q154338": "Matthias Grünewald",    # Изенгеймский алтарь, распятие с ужасами
+    "Q6682": "Gustave Doré",            # иллюстратор "Ада" Данте (гравюры)
 }
 
 # Страны, музеи которых считаем «европейскими/евразийскими» (по названию из Wikidata).
@@ -542,13 +549,21 @@ def vam_candidates():
 
 
 def wikidata_candidates():
-    """Генератор кандидатов из Wikidata — картины из МУЗЕЕВ ВСЕЙ ЕВРОПЫ.
+    """Генератор кандидатов из Wikidata — картины И гравюры из МУЗЕЕВ ВСЕЙ ЕВРОПЫ.
 
-    Берёт случайного знаменитого мастера и запрашивает его живопись вместе с
-    музеем-хранителем (P195) и страной музея (P17). Оставляет только картины,
-    хранящиеся в европейских/евразийских музеях (Прадо, Лувр, Уффици, Вена,
-    Мюнхен, Ватикан, Португалия и т.д.). Изображения — с Wikimedia Commons
+    Берёт случайного знаменитого мастера и запрашивает его произведения (живопись,
+    печатную графику, гравюры) вместе с музеем-хранителем (P195) и страной музея
+    (P17). Оставляет только работы в европейских/евразийских музеях (Прадо, Лувр,
+    Уффици, Вена, Мюнхен, Ватикан и т.д.). Изображения — с Wikimedia Commons
     в высоком разрешении.
+
+    Типы произведений (P31):
+      Q3305213 — живопись (paintings)
+      Q11060274 — печатная графика (prints)
+      Q11835431 — гравюры (engravings)
+
+    Это позволяет показывать, например, иллюстрации Доре к "Аду" Данте,
+    "Апокалипсис" Дюрера и другие мистические гравюры.
     """
     endpoint = "https://query.wikidata.org/sparql"
     qids = list(ARTIST_QIDS.keys())
@@ -559,7 +574,8 @@ def wikidata_candidates():
     for qid in qids[:EURO_QUERY_ATTEMPTS]:
         sparql = (
             "SELECT ?item ?itemLabel ?img ?inception ?collLabel ?countryLabel WHERE { "
-            "?item wdt:P31 wd:Q3305213; wdt:P170 wd:%s; wdt:P18 ?img. "
+            "VALUES ?type { wd:Q3305213 wd:Q11060274 wd:Q11835431 } "
+            "?item wdt:P31 ?type; wdt:P170 wd:%s; wdt:P18 ?img. "
             "OPTIONAL { ?item wdt:P195 ?coll. OPTIONAL { ?coll wdt:P17 ?country. } } "
             "OPTIONAL { ?item wdt:P571 ?inception. } "
             'SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } '
