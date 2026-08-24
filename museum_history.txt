@@ -1,4 +1,3 @@
-staatliche kunsthalle karlsruhe
 victoria and albert museum
 museum collection am römerholz
 dulwich picture gallery
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 thyssen-bornemisza museum
 musée des beaux-arts de strasbourg
 museo del prado
+cleveland museum of art
