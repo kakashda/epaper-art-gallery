@@ -1,4 +1,3 @@
-dulwich picture gallery
 smk — national gallery of denmark
 thyssen-bornemisza museum
 musée des beaux-arts de strasbourg
@@ -6,3 +5,4 @@ museo del prado
 cleveland museum of art
 apsley house
 national museum in gdańsk
+musée d'orsay
