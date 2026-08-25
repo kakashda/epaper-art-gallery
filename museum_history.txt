@@ -1,4 +1,3 @@
-victoria and albert museum
 bavarian state painting collections
 kunstmuseum basel
 national gallery
@@ -6,3 +5,4 @@ tate
 musée des beaux-arts de dijon
 musée d'orsay
 strasbourg museum of modern and contemporary art
+smk — national gallery of denmark
