@@ -1,4 +1,3 @@
-strasbourg museum of modern and contemporary art
 smk — national gallery of denmark
 bilbao fine arts museum
 victoria and albert museum
@@ -6,3 +5,4 @@ sistine chapel
 national gallery
 bavarian state painting collections
 museo del prado
+royal museum of fine arts antwerp
