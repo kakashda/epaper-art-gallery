@@ -971,35 +971,33 @@ def _crush_tones(img, black_thr, white_thr):
 
 
 def to_spectra6(rgb_image):
-    """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность,
-    ПРИТЕМНЯЕТ средние тона, ДАВИТ тени в чистый чёрный, слегка сглаживает и
-    квантует к 6 цветам с дизерингом Флойда–Стайнберга.
+    """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность/резкость,
+    ДАВИТ тени в чистый чёрный, квантует к 6 цветам БЕЗ дизеринга.
 
-    Борьба с «крупой» ведётся в три приёма:
-      1) гамма притемняет средние тона (меньше бело-точечной смеси);
-      2) `_crush_tones` уводит тёмные зоны в ЧИСТЫЙ чёрный — исчезает
-         красно-зелёный «снег» в тенях (самый заметный дефект);
-      3) лёгкое размытие 0.5px делает оставшийся дизеринг менее «зернистым».
+    КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: отключён Floyd-Steinberg дизеринг — он создавал сильное «зерно»
+    и делал текст нечитаемым. Без дизеринга текст становится АБСОЛЮТНО чётким,
+    хотя градиенты могут иметь лёгкую постеризацию (но на 6-цветной панели это
+    незаметно). Добавлена резкость (Sharpness) для максимальной чёткости надписей.
 
-    Возвращает RGB-изображение только из 6 цветов панели (дизеринг «вшит»)."""
+    Возвращает RGB-изображение только из 6 цветов панели (nearest color)."""
     img = rgb_image.convert("RGB")
 
     try:
         img = ImageOps.autocontrast(img, cutoff=1)
-        img = _apply_gamma(img, 1.40)                   # притемняем средние тона
-        img = ImageEnhance.Color(img).enhance(1.85)     # насыщенность (цвет вместо ч/б крупы)
-        img = ImageEnhance.Contrast(img).enhance(1.12)  # контраст
-        img = ImageEnhance.Brightness(img).enhance(0.93)  # без осветления, чуть темнее
-        img = _crush_tones(img, black_thr=55, white_thr=240)  # тени -> чистый чёрный
-        img = img.filter(ImageFilter.GaussianBlur(0.5))  # мягче зерно дизеринга
+        img = _apply_gamma(img, 1.20)                    # умеренное притемнение
+        img = ImageEnhance.Color(img).enhance(1.60)      # насыщенность
+        img = ImageEnhance.Contrast(img).enhance(1.25)   # контраст
+        img = ImageEnhance.Sharpness(img).enhance(2.0)   # РЕЗКОСТЬ для чёткого текста
+        img = _crush_tones(img, black_thr=65, white_thr=230)  # тени -> чистый чёрный
+        # БЕЗ blur — он размывал текст!
     except Exception:
         pass
 
-    # Квантование к нашей палитре с дизерингом Флойда–Стайнберга.
+    # Квантование к нашей палитре БЕЗ дизеринга (nearest color).
     palette_img = _build_palette_image()
     quantized = img.quantize(
         palette=palette_img,
-        dither=Image.Dither.FLOYDSTEINBERG,
+        dither=Image.Dither.NONE,  # ← БЕЗ дизеринга = чёткий текст!
     )
     return quantized.convert("RGB")
 
