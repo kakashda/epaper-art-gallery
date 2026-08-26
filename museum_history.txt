@@ -1,4 +1,3 @@
-collection willem v prince of orange nassau
 palace of versailles
 smk — national gallery of denmark
 cleveland museum of art
@@ -6,3 +5,4 @@ national museum of sculpture
 victoria and albert museum
 musée d'orsay
 national galleries scotland
+pushkin museum of fine arts
