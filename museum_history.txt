@@ -1,4 +1,3 @@
-courtauld institute of art
 cleveland museum of art
 tate
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ department of paintings of the louvre
 accademia carrara
 the met
 musée d'orsay
+gonzaga collection
