@@ -1,4 +1,3 @@
-museum of fine arts of lyon
 musée des beaux-arts de bordeaux
 palazzo pallavicini-rospigliosi
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ department of paintings of the louvre
 kunsthaus zürich
 bibliothèque municipale de besançon
 rijksmuseum
+victoria and albert museum
