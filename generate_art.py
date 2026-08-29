@@ -910,7 +910,7 @@ def upscale_if_needed(img, target_w, target_h):
     return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
 
-def process_image_to_canvas(source, target_w, target_h, enhance=True):
+def process_image_to_canvas(source, target_w, target_h, enhance=True, align_top=False):
     """Готовит кадр заданного разрешения БЕЗ обрезки (contain + поля).
 
     Картина вписывается ЦЕЛИКОМ: масштабируется по меньшему коэффициенту (без
@@ -920,6 +920,10 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True):
     `enhance` — если True (по умолчанию, для веб-JPEG), слегка повышаем
     чёткость/контраст/цвет. Если False (для PNG под e-paper), НЕ трогаем
     изображение вообще — только меняем размер, как просил пользователь.
+
+    `align_top` — если True (для PNG), картина прижимается к ВЕРХУ кадра,
+    чёрная полоса остаётся ТОЛЬКО внизу. Если False (по умолчанию, для JPG),
+    картина центрируется по вертикали (letterbox сверху и снизу).
 
     `source` — уже открытое и приведённое к RGB изображение (PIL.Image).
     """
@@ -935,10 +939,12 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True):
     new_h = max(1, int(round(h * factor)))
     resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
-    # Чёрный холст целевого размера, картина по центру (letterbox / pillarbox).
+    # Чёрный холст целевого размера. По горизонтали всегда центрируем (pillarbox).
+    # По вертикали: если align_top=True (PNG), прижимаем к верху (letterbox только
+    # снизу); если False (JPG), центрируем (letterbox сверху и снизу).
     canvas = Image.new("RGB", (target_w, target_h), (0, 0, 0))
     off_x = (target_w - new_w) // 2
-    off_y = (target_h - new_h) // 2
+    off_y = 0 if align_top else (target_h - new_h) // 2
     canvas.paste(resized, (off_x, off_y))
 
     if not enhance:
@@ -1178,7 +1184,8 @@ def create_image(artwork, image_bytes):
     # цветокоррекции, резкости, гаммы и НИКАКОГО снапа к 6 цветам. Только
     # вписываем в 800x480 (enhance=False) и рисуем сверху прозрачную плашку.
     # Преобразование цвета под палитру панели делает сама прошивка дисплея.
-    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT, enhance=False)
+    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT, 
+                                    enhance=False, align_top=True)
     png_image = draw_caption(base, lines, scale=1.0)   # прозрачная плашка сверху
     png_image.save(OUTPUT_PNG, "PNG", optimize=True)
     print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (только resize, без обработки)")
