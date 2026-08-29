@@ -849,19 +849,12 @@ def build_caption_lines(artwork):
     year = clean_text(artwork.get("date"), 24)
     meta = f"{artist} · {year}" if year else artist
 
-    # Третья строка — «описание»: техника/материал (или культура) + музей.
-    medium = clean_text(artwork.get("medium"), 64)
-    culture = clean_text(artwork.get("culture"), 40)
-    source = clean_text(artwork.get("source"), 40)
+    # Третья строка — только МУЗЕЙ (где картина хранится сейчас).
+    # Технику/материал ("oil painting", "tempera" и т.п.) НЕ показываем —
+    # по просьбе пользователя оставляем название, автора, год и место хранения.
+    source = clean_text(artwork.get("source"), 48)
 
-    desc_parts = []
-    if medium:
-        desc_parts.append(medium)
-    elif culture:
-        desc_parts.append(culture)
-    if source:
-        desc_parts.append(source)
-    desc = " · ".join(desc_parts)
+    desc = source
 
     lines = [("title", title), ("meta", meta)]
     if desc:
@@ -915,10 +908,13 @@ def draw_caption(image, lines, scale):
     x2 = x1 + box_w
     y2 = y1 + box_h
 
-    # Полупрозрачная плашка — картина просматривается сквозь неё.
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 110))
+    # Плотная тёмная плашка. ВАЖНО: без дизеринга полупрозрачная плашка над
+    # яркими участками квантовалась в светлый цвет и «исчезала» — текст пропадал.
+    # Высокая непрозрачность гарантирует, что плашка станет ЧИСТО ЧЁРНОЙ после
+    # квантования, а белый текст на ней — всегда читаемым.
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 215))
 
-    shadow = (0, 0, 0, 170)
+    shadow = (0, 0, 0, 220)
     cursor_y = y1 + pad_y
     for kind, text, font, _tw, text_h, top in measured:
         text_x = x1 + pad_x
@@ -988,7 +984,10 @@ def to_spectra6(rgb_image):
         img = ImageEnhance.Color(img).enhance(1.60)      # насыщенность
         img = ImageEnhance.Contrast(img).enhance(1.25)   # контраст
         img = ImageEnhance.Sharpness(img).enhance(2.0)   # РЕЗКОСТЬ для чёткого текста
-        img = _crush_tones(img, black_thr=65, white_thr=230)  # тени -> чистый чёрный
+        # Мягкое подавление только КРАЙНИХ тонов: без дизеринга «снега» в тенях
+        # больше нет, поэтому агрессивно топить тени в чёрный не нужно — иначе
+        # тёмные участки картины сливаются с чёрной рамкой и кажутся «обрезанными».
+        img = _crush_tones(img, black_thr=22, white_thr=245)
         # БЕЗ blur — он размывал текст!
     except Exception:
         pass
