@@ -1,4 +1,3 @@
-bavarian state painting collections
 rijksmuseum
 musée des beaux-arts de rennes
 kunsthaus zürich
@@ -6,3 +5,4 @@ museo diocesano de arte antiguo (sigüenza)
 the met
 kupferstich-kabinett dresden
 victoria and albert museum
+cleveland museum of art
