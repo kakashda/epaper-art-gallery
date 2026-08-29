@@ -801,27 +801,40 @@ def upscale_if_needed(img, target_w, target_h):
     return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
 
-def process_image_to_canvas(source, target_w, target_h):
-    """Готовит кадр заданного разрешения БЕЗ обрезки (contain + поля).
+# Порог обрезки: если для полного заполнения экрана нужно обрезать не более
+# чем в CROP_LIMIT раз сильнее, чем при вписывании целиком, — заполняем экран
+# (cover, БЕЗ чёрных полей). Иначе вписываем целиком (contain, с полями), чтобы
+# у портретов/панорам не терялась половина картины.
+CROP_LIMIT = 1.5
 
-    Раньше использовался `ImageOps.fit`, который ОБРЕЗАЛ картину под пропорции
-    экрана (5:3) — у портретных и квадратных полотен терялись верх и низ.
-    Теперь картина вписывается ЦЕЛИКОМ: масштабируется по меньшему коэффициенту,
-    а свободное место заполняется чёрными полями (чёрный — родной цвет панели
-    Spectra 6, поэтому поля выглядят аккуратно и не дизерятся).
+
+def process_image_to_canvas(source, target_w, target_h):
+    """Готовит кадр заданного разрешения, максимально используя экран.
+
+    Умная логика:
+      • Если пропорции картины близки к экрану (5:3) — ЗАПОЛНЯЕМ весь экран
+        (cover): картина крупная, БЕЗ чёрных полей, обрезаются только небольшие
+        края по центру. Это то, о чём просил пользователь — максимальный размер.
+      • Если пропорции сильно отличаются (портрет/узкая панорама) — вписываем
+        ЦЕЛИКОМ (contain), добавляя чёрные поля, чтобы не срезать половину
+        полотна. Чёрный — родной цвет панели Spectra 6, поля выглядят аккуратно.
 
     `source` — уже открытое и приведённое к RGB изображение (PIL.Image).
     """
     src = source.convert("RGB")
     w, h = src.size
 
-    # Масштаб «вписать целиком»: по меньшему коэффициенту, чтобы всё поместилось.
-    factor = min(target_w / w, target_h / h)
+    factor_contain = min(target_w / w, target_h / h)  # вписать целиком
+    factor_cover = max(target_w / w, target_h / h)    # заполнить экран
+    crop_ratio = factor_cover / factor_contain        # насколько сильнее обрезка
+
+    factor = factor_cover if crop_ratio <= CROP_LIMIT else factor_contain
     new_w = max(1, int(round(w * factor)))
     new_h = max(1, int(round(h * factor)))
     resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
-    # Чёрный холст целевого размера, картина по центру (letterbox / pillarbox).
+    # Холст целевого размера; при cover лишнее уходит за края (центр-кроп),
+    # при contain по бокам/сверху-снизу остаются чёрные поля.
     canvas = Image.new("RGB", (target_w, target_h), (0, 0, 0))
     off_x = (target_w - new_w) // 2
     off_y = (target_h - new_h) // 2
@@ -908,20 +921,22 @@ def draw_caption(image, lines, scale):
     x2 = x1 + box_w
     y2 = y1 + box_h
 
-    # Плотная тёмная плашка. ВАЖНО: без дизеринга полупрозрачная плашка над
-    # яркими участками квантовалась в светлый цвет и «исчезала» — текст пропадал.
-    # Высокая непрозрачность гарантирует, что плашка станет ЧИСТО ЧЁРНОЙ после
-    # квантования, а белый текст на ней — всегда читаемым.
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 215))
+    # ПРОЗРАЧНАЯ плашка: картина хорошо просматривается сквозь неё. Читаемость
+    # текста обеспечивает не плашка, а ЧЁРНАЯ ОБВОДКА вокруг белых букв — она
+    # держит текст на любом фоне даже там, где полупрозрачная плашка после
+    # квантования к 6 цветам «растворяется».
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 90))
 
-    shadow = (0, 0, 0, 220)
+    stroke = max(int(round(2 * scale)), 2)  # толщина чёрной обводки букв
     cursor_y = y1 + pad_y
     for kind, text, font, _tw, text_h, top in measured:
         text_x = x1 + pad_x
         text_y = cursor_y - top  # выравниваем реальный верх глифов по cursor_y
-        fill = (255, 255, 255, 255) if kind == "title" else (232, 232, 232, 255)
-        draw.text((text_x + shadow_off, text_y + shadow_off), text, font=font, fill=shadow)
-        draw.text((text_x, text_y), text, font=font, fill=fill)
+        fill = (255, 255, 255, 255) if kind == "title" else (238, 238, 238, 255)
+        draw.text(
+            (text_x, text_y), text, font=font, fill=fill,
+            stroke_width=stroke, stroke_fill=(0, 0, 0, 255),
+        )
         cursor_y += text_h + gap
 
     return Image.alpha_composite(image, overlay).convert("RGB")
@@ -966,39 +981,67 @@ def _crush_tones(img, black_thr, white_thr):
     return img
 
 
-def to_spectra6(rgb_image):
-    """Готовит изображение под панель Spectra 6: усиливает контраст/насыщенность/резкость,
-    ДАВИТ тени в чистый чёрный, квантует к 6 цветам БЕЗ дизеринга.
+def _warm_shift(img, rmul=1.12, gmul=0.92, bmul=0.95):
+    """Тёплый сдвиг каналов ПЕРЕД квантованием к 6 цветам.
 
-    КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: отключён Floyd-Steinberg дизеринг — он создавал сильное «зерно»
-    и делал текст нечитаемым. Без дизеринга текст становится АБСОЛЮТНО чётким,
-    хотя градиенты могут иметь лёгкую постеризацию (но на 6-цветной панели это
-    незаметно). Добавлена резкость (Sharpness) для максимальной чёткости надписей.
+    У Spectra 6 нет коричневого/бежевого/тёплого-серого. Тёплые песчаные стены
+    (типичны для венецианской/европейской архитектуры) при nearest-color попадали
+    в ЗЕЛЁНЫЙ и картинка выглядела болотной. Лёгкий подъём красного и приглушение
+    зелёного/синего смещают такие тона в ЖЁЛТЫЙ — стены выглядят как тёплый камень,
+    а не как трава. Значения подобраны мягкими, чтобы небо/вода не краснели.
+    """
+    r, g, b = img.split()
+    r = r.point(lambda p: min(255, int(p * rmul + 0.5)))
+    g = g.point(lambda p: min(255, int(p * gmul + 0.5)))
+    b = b.point(lambda p: min(255, int(p * bmul + 0.5)))
+    return Image.merge("RGB", (r, g, b))
+
+
+def _quantize_to_palette(img):
+    """Снап к 6 цветам панели БЕЗ дизеринга (nearest color), без обработки тонов."""
+    palette_img = _build_palette_image()
+    quantized = img.convert("RGB").quantize(
+        palette=palette_img,
+        dither=Image.Dither.NONE,
+    )
+    return quantized.convert("RGB")
+
+
+def to_spectra6(rgb_image):
+    """Готовит изображение под панель Spectra 6: чистит шум, усиливает цвет,
+    квантует к 6 цветам БЕЗ дизеринга.
+
+    БЕЗ дизеринга текст и границы остаются чёткими. Главное новшество —
+    MedianFilter ПЕРЕД квантованием: он убирает мелкий шум текстуры холста в
+    средних тонах (небо, кожа, стены), из-за которого после снапа к 6 цветам
+    появлялась «крупа» из бело-жёлто-зелёных точек.
 
     Возвращает RGB-изображение только из 6 цветов панели (nearest color)."""
     img = rgb_image.convert("RGB")
 
     try:
         img = ImageOps.autocontrast(img, cutoff=1)
-        img = _apply_gamma(img, 1.20)                    # умеренное притемнение
-        img = ImageEnhance.Color(img).enhance(1.60)      # насыщенность
-        img = ImageEnhance.Contrast(img).enhance(1.25)   # контраст
-        img = ImageEnhance.Sharpness(img).enhance(2.0)   # РЕЗКОСТЬ для чёткого текста
-        # Мягкое подавление только КРАЙНИХ тонов: без дизеринга «снега» в тенях
-        # больше нет, поэтому агрессивно топить тени в чёрный не нужно — иначе
-        # тёмные участки картины сливаются с чёрной рамкой и кажутся «обрезанными».
-        img = _crush_tones(img, black_thr=22, white_thr=245)
-        # БЕЗ blur — он размывал текст!
+        # E-paper — ОТРАЖАЮЩАЯ панель без подсветки: тёмные полотна на ней «тонут»
+        # и выглядят грязно. Поэтому НЕ притемняем, а слегка ПОДНИМАЕМ средние
+        # тона (gamma < 1) и яркость — детали в тенях становятся видны.
+        img = _apply_gamma(img, 0.90)                    # поднимаем тени/средние
+        img = ImageEnhance.Brightness(img).enhance(1.04)  # чуть светлее
+        img = ImageEnhance.Color(img).enhance(1.55)      # насыщенность
+        img = ImageEnhance.Contrast(img).enhance(1.12)   # мягкий контраст
+        # Тёплый сдвиг: песчаные стены -> жёлтый, а не зелёный (см. _warm_shift).
+        img = _warm_shift(img, rmul=1.12, gmul=0.92, bmul=0.95)
+        # ГЛАВНОЕ против «крупы»: медианный фильтр убирает мелкий шум текстуры
+        # холста в средних тонах (небо, кожа, стены). Именно этот шум после
+        # квантования к 6 цветам «прыгал» бело-жёлто-зелёными точками. Подпись
+        # рисуется ПОЗЖЕ, поэтому сглаживание её не касается — текст остаётся чётким.
+        img = img.filter(ImageFilter.MedianFilter(size=3))
+        img = ImageEnhance.Sharpness(img).enhance(1.4)   # вернуть чёткость краёв
+        # Только совсем чёрное -> чёрное, совсем белое -> белое.
+        img = _crush_tones(img, black_thr=12, white_thr=248)
     except Exception:
         pass
 
-    # Квантование к нашей палитре БЕЗ дизеринга (nearest color).
-    palette_img = _build_palette_image()
-    quantized = img.quantize(
-        palette=palette_img,
-        dither=Image.Dither.NONE,  # ← БЕЗ дизеринга = чёткий текст!
-    )
-    return quantized.convert("RGB")
+    return _quantize_to_palette(img)
 
 
 def create_image(artwork, image_bytes):
@@ -1012,13 +1055,18 @@ def create_image(artwork, image_bytes):
 
     lines = build_caption_lines(artwork)
 
-    # --- Главный файл под E1002: 800x480, подпись, затем квантование в 6 цветов ---
+    # --- Главный файл под E1002: 800x480, 6 цветов Spectra 6 ---
+    # ПОРЯДОК ВАЖЕН: сначала сглаживаем+квантуем САМУ картину (без текста), затем
+    # поверх готового 6-цветного изображения рисуем подпись и делаем финальный
+    # снап к палитре. Так сглаживание против «крупы» не касается текста —
+    # буквы остаются идеально чёткими, а плашка выглядит прозрачной.
     base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
-    base_captioned = draw_caption(base, lines, scale=1.0)
-    spectra = to_spectra6(base_captioned)
-    # PNG обязательно (lossless) — JPEG размыл бы точки дизеринга.
+    spectra = to_spectra6(base)                        # сглаживание + квантование
+    captioned = draw_caption(spectra, lines, scale=1.0)  # подпись с обводкой
+    spectra = _quantize_to_palette(captioned)         # финальный снап к 6 цветам
+    # PNG обязательно (lossless) — JPEG размыл бы чёткие границы цветов.
     spectra.save(OUTPUT_PNG, "PNG", optimize=True)
-    print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (Spectra6, 6 цветов, дизеринг)")
+    print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (Spectra6, 6 цветов)")
 
     # --- JPEG-версии (полноцветные, для веба и других дисплеев) ---
     for filename, width, height in OUTPUT_SIZES:
