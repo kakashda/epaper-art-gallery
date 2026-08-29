@@ -1,4 +1,3 @@
-the met
 national gallery
 kröller-müller museum
 musée d'orsay
@@ -6,3 +5,4 @@ pushkin museum of fine arts
 national galleries scotland
 chester beatty library
 cleveland museum of art
+smk — national gallery of denmark
