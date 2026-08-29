@@ -215,6 +215,11 @@ FAMOUS_ARTISTS = [
     "Canaletto", "Henri de Toulouse-Lautrec", "Henri Rousseau",
     "Gustav Klimt", "Albrecht Durer", "Hans Holbein the Younger",
     "Nicolas de Stael", "Georges de La Tour", "Jean-Baptiste-Simeon Chardin",
+    # Пейзажисты и маринисты (против портретов)
+    "John Constable", "Jacob van Ruisdael", "Caspar David Friedrich",
+    "Ivan Aivazovsky", "William Turner", "Albert Bierstadt",
+    # Натюрмортщики
+    "Willem Claesz Heda", "Pieter Claesz", "Jan Davidsz de Heem",
 ]
 
 # Wikidata QID знаменитых европейских мастеров. Через Wikidata мы получаем
@@ -249,6 +254,16 @@ ARTIST_QIDS = {
     "Q7751": "Giuseppe Arcimboldo",     # головы из фруктов/рыб, маньеризм
     "Q154338": "Matthias Grünewald",    # Изенгеймский алтарь, распятие с ужасами
     "Q6682": "Gustave Doré",            # иллюстратор "Ада" Данте (гравюры)
+    # Пейзажисты и маринисты (разнообразие против портретов)
+    "Q159183": "John Constable",        # английские пейзажи
+    "Q213612": "Jacob van Ruisdael",    # голландские пейзажи
+    "Q104270": "Caspar David Friedrich", # романтические пейзажи
+    "Q181568": "Ivan Aivazovsky",       # марины, морские виды
+    "Q45006": "Albert Bierstadt",       # американские пейзажи (но европеец по рождению)
+    # Натюрмортщики
+    "Q454671": "Willem Claesz Heda",    # голландский натюрморт
+    "Q314548": "Pieter Claesz",         # голландский натюрморт
+    "Q161348": "Jan Davidsz de Heem",   # голландский/фламандский натюрморт
 }
 
 # Страны, музеи которых считаем «европейскими/евразийскими» (по названию из Wikidata).
@@ -269,8 +284,10 @@ EUROPEAN_COUNTRIES = {
 # тоже смещены в сторону европейской классической живописи.
 FALLBACK_TERMS = [
     "European painting", "old master painting", "impressionism painting",
-    "baroque painting", "renaissance painting", "portrait oil painting",
-    "landscape oil painting",
+    "baroque painting", "renaissance painting",
+    "landscape oil painting", "still life oil painting", "genre painting",
+    "mythology painting", "religious painting", "seascape painting",
+    "interior scene painting", "battle scene painting", "veduta painting",
 ]
 
 # Европейские отделы The Met — сильно повышают шанс попасть на «светил».
