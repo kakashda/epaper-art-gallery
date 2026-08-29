@@ -1,4 +1,3 @@
-tate
 st bavo's cathedral
 musée d'orsay
 schloss ambras innsbruck
@@ -6,3 +5,4 @@ palais des beaux-arts de lille
 smk — national gallery of denmark
 victoria and albert museum
 kunsthistorisches museum
+ny carlsberg glyptotek
