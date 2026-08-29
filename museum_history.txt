@@ -1,4 +1,3 @@
-wallace collection
 victoria and albert museum
 smk — national gallery of denmark
 department of paintings of the louvre
@@ -6,3 +5,4 @@ bavarian state painting collections
 rijksmuseum
 musée des beaux-arts de rennes
 kunsthaus zürich
+museo diocesano de arte antiguo (sigüenza)
