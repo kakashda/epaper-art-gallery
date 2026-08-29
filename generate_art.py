@@ -27,12 +27,11 @@ OUTPUT_HEIGHT = 480
 # ≈24px по высоте) — рамка гарантированно ничего не срезает.
 SAFE_INSET_FRAC = 0.05
 
-# Дополнительный отступ СНИЗУ именно для ПОДПИСИ. Превью SenseCraft HMI и сам
-# дисплей срезают заметную полосу у нижнего края (~10% высоты) — из-за этого
-# нижняя (третья) строка подписи уходила за край, хотя в самом PNG она есть.
-# Поэтому подпись держим не в 5%-й зоне, а заметно выше — на 13% от низа, чтобы
-# весь текст гарантированно оставался в видимой области дисплея.
-CAPTION_BOTTOM_FRAC = 0.13
+# Плашка стоит в НИЖНЕМ ЛЕВОМ УГЛУ. Отступ слева маленький (почти к самому
+# краю), а снизу держим ровно на границе зоны обрезки дисплея (~10% высоты),
+# чтобы плашка была максимально в углу, но нижняя строка текста не срезалась.
+CAPTION_LEFT_FRAC = 0.02    # ≈16px от левого края — плашка почти в углу
+CAPTION_BOTTOM_FRAC = 0.10  # ≈48px от низа — сразу над зоной обрезки дисплея
 
 # --- Главный файл под E1002 (SenseCraft HMI, ручная загрузка) ---------------
 # E1002 — это полноцветный E Ink Spectra 6 (ACeP). Панель физически умеет
@@ -79,6 +78,11 @@ PORTRAIT_TITLE_WORDS = (
     "head of a", "bust of", "effigy of",
     "портрет", "автопортрет",
 )
+
+# Вероятность ПРОПУСТИТЬ портрет (0.0 = все портреты проходят, 1.0 = все блокируются).
+# 0.75 = пропускаем 75% портретов, т.е. примерно 1 из 4 портретов попадёт в показ —
+# портреты БУДУТ, но их в ~4 раза меньше чем сюжетных/исторических картин.
+PORTRAIT_SKIP_PROBABILITY = 0.75
 
 # Сетевые параметры
 HTTP_TIMEOUT = 30
@@ -626,17 +630,13 @@ def wikidata_candidates():
     bindings = []
     chosen_qid = None
     for qid in qids[:EURO_QUERY_ATTEMPTS]:
-        # MINUS отсекает работы жанра «портрет» (Q134307) и «автопортрет»
-        # (Q1400853) — пользователь просил динамичные/сюжетные сцены, а не
-        # вереницу портретов. Прочие жанры (сюжетная, историческая, батальная,
-        # религиозная живопись, гравюры) остаются.
         sparql = (
-            "SELECT ?item ?itemLabel ?img ?inception ?collLabel ?countryLabel WHERE { "
+            "SELECT ?item ?itemLabel ?img ?inception ?collLabel ?countryLabel ?genreLabel WHERE { "
             "VALUES ?type { wd:Q3305213 wd:Q11060274 wd:Q11835431 } "
             "?item wdt:P31 ?type; wdt:P170 wd:%s; wdt:P18 ?img. "
-            "MINUS { ?item wdt:P136 ?g. VALUES ?g { wd:Q134307 wd:Q1400853 } } "
             "OPTIONAL { ?item wdt:P195 ?coll. OPTIONAL { ?coll wdt:P17 ?country. } } "
             "OPTIONAL { ?item wdt:P571 ?inception. } "
+            "OPTIONAL { ?item wdt:P136 ?genre. } "
             'SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } '
             "LIMIT 120" % qid
         )
@@ -688,6 +688,7 @@ def wikidata_candidates():
             "medium": "oil painting",
             "culture": country,
             "source": source,
+            "genre": _clean_meta(row.get("genreLabel", {}).get("value")),
         }
 
 
@@ -761,10 +762,13 @@ def save_recent_artist(artist):
         print(f"[history] не удалось сохранить историю авторов: {error}")
 
 
-def _looks_like_portrait(title):
-    """True, если название работы выглядит как портрет (для источников без жанра)."""
-    text = str(title or "").lower()
-    return any(word in text for word in PORTRAIT_TITLE_WORDS)
+def _looks_like_portrait(artwork):
+    """True, если работа выглядит как портрет — по жанру (Wikidata) или названию."""
+    genre = str(artwork.get("genre") or "").lower()
+    if "portrait" in genre:   # 'portrait', 'self-portrait' из Wikidata P136
+        return True
+    title = str(artwork.get("title") or "").lower()
+    return any(word in title for word in PORTRAIT_TITLE_WORDS)
 
 
 def get_random_artwork_bytes():
@@ -816,8 +820,10 @@ def get_random_artwork_bytes():
                     if _artist_key(artwork.get("artist")) in recent_artists:
                         print(f"[fair-skip] {artwork.get('artist')} — автор недавно показан")
                         continue
-                    if _looks_like_portrait(artwork.get("title")):
-                        print(f"[fair-skip] «{artwork.get('title')}» — похоже на портрет")
+                    if (_looks_like_portrait(artwork)
+                            and random.random() < PORTRAIT_SKIP_PROBABILITY):
+                        print(f"[fair-skip] «{artwork.get('title')}» — портрет "
+                              f"(пропуск с вероятностью {PORTRAIT_SKIP_PROBABILITY:.0%})")
                         continue
                 tried += 1
                 try:
@@ -986,10 +992,10 @@ def draw_caption(image, lines, scale):
     draw = ImageDraw.Draw(overlay)
     W, H = image.size
 
-    # Подпись держим внутри безопасного поля (не вплотную к краям), иначе рамка
-    # дисплея (bezel) и скруглённое превью SenseCraft срезают её у нижнего края.
-    # Снизу отступ БОЛЬШЕ (CAPTION_BOTTOM_FRAC), т.к. дисплей срезает низ сильнее.
-    margin_x = max(int(round(SAFE_INSET_FRAC * W)), 8)
+    # Плашка в нижнем левом углу: слева почти вплотную к краю (CAPTION_LEFT_FRAC),
+    # снизу — на границе зоны обрезки дисплея (CAPTION_BOTTOM_FRAC), чтобы угол,
+    # но текст не срезался.
+    margin_x = max(int(round(CAPTION_LEFT_FRAC * W)), 6)
     margin_y = max(int(round(CAPTION_BOTTOM_FRAC * H)), 12)
     pad_x = max(int(round(12 * scale)), 8)
     pad_y = max(int(round(9 * scale)), 6)
@@ -1024,10 +1030,10 @@ def draw_caption(image, lines, scale):
     x2 = x1 + box_w
     y2 = y1 + box_h
 
-    # Плотная (почти непрозрачная) чёрная плашка под текстом — как раньше:
-    # она гарантированно читается на любом фоне и не «растворяется» после
-    # квантования к 6 цветам. Дополнительно буквы имеют чёрную обводку.
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 200))
+    # Полупрозрачная чёрная плашка под текстом — в 2 раза прозрачнее прежней
+    # (alpha 200 -> 100): картина хорошо просматривается сквозь неё. Читаемость
+    # текста держит ЧЁРНАЯ ОБВОДКА вокруг белых букв.
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 100))
 
     stroke = max(int(round(2 * scale)), 2)  # толщина чёрной обводки букв
     cursor_y = y1 + pad_y
