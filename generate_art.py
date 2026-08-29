@@ -801,12 +801,16 @@ def upscale_if_needed(img, target_w, target_h):
     return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
 
-def process_image_to_canvas(source, target_w, target_h):
+def process_image_to_canvas(source, target_w, target_h, enhance=True):
     """Готовит кадр заданного разрешения БЕЗ обрезки (contain + поля).
 
-    Картина вписывается ЦЕЛИКОМ: масштабируется по меньшему коэффициенту, а
-    свободное место заполняется чёрными полями (чёрный — родной цвет панели
-    Spectra 6, поэтому поля выглядят аккуратно). Так ничего не срезается.
+    Картина вписывается ЦЕЛИКОМ: масштабируется по меньшему коэффициенту (без
+    искажения пропорций), а свободное место заполняется чёрными полями. Так
+    ничего не срезается и геометрия оригинала сохраняется.
+
+    `enhance` — если True (по умолчанию, для веб-JPEG), слегка повышаем
+    чёткость/контраст/цвет. Если False (для PNG под e-paper), НЕ трогаем
+    изображение вообще — только меняем размер, как просил пользователь.
 
     `source` — уже открытое и приведённое к RGB изображение (PIL.Image).
     """
@@ -824,6 +828,10 @@ def process_image_to_canvas(source, target_w, target_h):
     off_x = (target_w - new_w) // 2
     off_y = (target_h - new_h) // 2
     canvas.paste(resized, (off_x, off_y))
+
+    if not enhance:
+        # PNG под e-paper: НИКАКОЙ обработки — только изменённый размер.
+        return canvas
 
     # Повышаем локальную чёткость и слегка контраст — лучше смотрится на e-paper.
     final = canvas.filter(ImageFilter.UnsharpMask(radius=1.2, percent=130, threshold=3))
@@ -872,7 +880,8 @@ def draw_caption(image, lines, scale):
     draw = ImageDraw.Draw(overlay)
     W, H = image.size
 
-    margin = max(int(round(10 * scale)), 8)
+    # Плашка начинается ровно в левом нижнем углу кадра (без отступа от краёв).
+    margin = 0
     pad_x = max(int(round(12 * scale)), 8)
     pad_y = max(int(round(9 * scale)), 6)
     gap = max(int(round(5 * scale)), 3)
@@ -1040,18 +1049,15 @@ def create_image(artwork, image_bytes):
 
     lines = build_caption_lines(artwork)
 
-    # --- Главный файл под E1002: 800x480, 6 цветов Spectra 6 ---
-    # БЕЗ «улучшайзинга»: только подгоняем размер, рисуем подпись и делаем
-    # снап к 6 цветам панели (nearest color, БЕЗ дизеринга). Никакой
-    # гаммы/насыщенности/тёплого сдвига/медианного фильтра — изображение НЕ
-    # портим, отдаём максимально близко к оригиналу. Снап к 6 цветам —
-    # единственное необходимое: панель физически показывает только 6 цветов.
-    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
-    captioned = draw_caption(base, lines, scale=1.0)   # подпись с обводкой
-    spectra = _quantize_to_palette(captioned)          # снап к 6 цветам
-    # PNG обязательно (lossless) — JPEG размыл бы чёткие границы цветов.
-    spectra.save(OUTPUT_PNG, "PNG", optimize=True)
-    print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (Spectra6, 6 цветов)")
+    # --- Главный файл под E1002 (PNG): ТОЛЬКО изменение размера + подпись ---
+    # По просьбе пользователя изображение НЕ обрабатываем вообще: никакой
+    # цветокоррекции, резкости, гаммы и НИКАКОГО снапа к 6 цветам. Только
+    # вписываем в 800x480 (enhance=False) и рисуем сверху прозрачную плашку.
+    # Преобразование цвета под палитру панели делает сама прошивка дисплея.
+    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT, enhance=False)
+    png_image = draw_caption(base, lines, scale=1.0)   # прозрачная плашка сверху
+    png_image.save(OUTPUT_PNG, "PNG", optimize=True)
+    print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (только resize, без обработки)")
 
     # --- JPEG-версии (полноцветные, для веба и других дисплеев) ---
     for filename, width, height in OUTPUT_SIZES:
