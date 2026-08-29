@@ -1,4 +1,3 @@
-vlaamse kunstcollectie
 victoria and albert museum
 unterlinden museum
 department of paintings of the louvre
@@ -6,3 +5,4 @@ cleveland museum of art
 galleria dell'accademia
 tate
 smk — national gallery of denmark
+hermitage museum
