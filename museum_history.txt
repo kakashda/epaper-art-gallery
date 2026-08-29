@@ -1,4 +1,3 @@
-demidov collection
 smk — national gallery of denmark
 duke of westminster collection
 musée d'orsay
@@ -6,3 +5,4 @@ cleveland museum of art
 nationalmuseum
 musea brugge
 musées nationaux récupération
+staatliche kunstsammlungen dresden
