@@ -1,4 +1,3 @@
-académie royale de peinture et de sculpture
 victoria and albert museum
 smk — national gallery of denmark
 musée des beaux-arts de dijon
@@ -6,3 +5,4 @@ rijksmuseum
 mauritshuis
 basilica of santa croce
 nationalmuseum
+muma museum of modern art andré malraux
