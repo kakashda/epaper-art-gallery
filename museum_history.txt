@@ -1,4 +1,3 @@
-museum of grenoble
 victoria and albert museum
 museo del prado
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ nationalmuseum
 musée toulouse-lautrec
 cleveland museum of art
 musée d'orsay
+musée des beaux-arts de pau
