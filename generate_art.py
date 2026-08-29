@@ -1184,9 +1184,13 @@ def create_image(artwork, image_bytes):
     # цветокоррекции, резкости, гаммы и НИКАКОГО снапа к 6 цветам. Только
     # вписываем в 800x480 (enhance=False) и рисуем сверху прозрачную плашку.
     # Преобразование цвета под палитру панели делает сама прошивка дисплея.
-    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT, 
-                                    enhance=False, align_top=True)
-    png_image = draw_caption(base, lines, scale=1.0)   # прозрачная плашка сверху
+    # Проблема со сдвигом/обрезкой оказалась на стороне самого e-paper девайса,
+    # поэтому PNG теперь делаем в той же раскладке, что и JPG: без отступов
+    # (align_top=False, картина по центру) и с плашкой вплотную в нижний левый
+    # угол (flush_bottom_left=True).
+    base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT,
+                                    enhance=False)
+    png_image = draw_caption(base, lines, scale=1.0, flush_bottom_left=True)
     png_image.save(OUTPUT_PNG, "PNG", optimize=True)
     print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (только resize, без обработки)")
 
