@@ -1,4 +1,3 @@
-mauritshuis
 basilica of santa croce
 nationalmuseum
 muma museum of modern art andré malraux
@@ -6,3 +5,4 @@ department of paintings of the louvre
 victoria and albert museum
 cleveland museum of art
 kunsthistorisches museum
+smk — national gallery of denmark
