@@ -980,23 +980,33 @@ def build_caption_lines(artwork):
     return lines
 
 
-def draw_caption(image, lines, scale):
+def draw_caption(image, lines, scale, flush_bottom_left=False):
     """Рисует полупрозрачную плашку с подписью, масштабируя всё под разрешение.
 
     `scale` = высота_кадра / базовая_высота (480). Шрифты, отступы и радиус
     скругления умножаются на scale, чтобы плашка выглядела одинаково на всех
     форматах — от 800x480 до 4K.
+
+    `flush_bottom_left` — если True (для JPG), плашка прижата в самый нижний
+    левый угол БЕЗ отступов. Если False (для PNG под e-paper E1002), плашка
+    приподнята над зоной обрезки дисплея (CAPTION_BOTTOM_FRAC) и чуть отступает
+    слева (CAPTION_LEFT_FRAC).
     """
     image = image.convert("RGBA")
     overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     W, H = image.size
 
-    # Плашка в нижнем левом углу: слева почти вплотную к краю (CAPTION_LEFT_FRAC),
-    # снизу — на границе зоны обрезки дисплея (CAPTION_BOTTOM_FRAC), чтобы угол,
-    # но текст не срезался.
-    margin_x = max(int(round(CAPTION_LEFT_FRAC * W)), 6)
-    margin_y = max(int(round(CAPTION_BOTTOM_FRAC * H)), 12)
+    if flush_bottom_left:
+        # JPG: плашка в самом низу, вплотную к левому-нижнему углу — без отступов.
+        margin_x = 0
+        margin_y = 0
+    else:
+        # PNG (e-paper E1002): слева чуть отступаем (CAPTION_LEFT_FRAC), снизу
+        # держим над зоной обрезки дисплея (CAPTION_BOTTOM_FRAC), чтобы нижняя
+        # строка текста не срезалась физическим краем панели.
+        margin_x = max(int(round(CAPTION_LEFT_FRAC * W)), 6)
+        margin_y = max(int(round(CAPTION_BOTTOM_FRAC * H)), 12)
     pad_x = max(int(round(12 * scale)), 8)
     pad_y = max(int(round(9 * scale)), 6)
     gap = max(int(round(5 * scale)), 3)
@@ -1176,7 +1186,8 @@ def create_image(artwork, image_bytes):
     # --- JPEG-версии (полноцветные, для веба и других дисплеев) ---
     for filename, width, height in OUTPUT_SIZES:
         canvas = process_image_to_canvas(source, width, height)
-        composite = draw_caption(canvas, lines, scale=height / OUTPUT_HEIGHT)
+        composite = draw_caption(canvas, lines, scale=height / OUTPUT_HEIGHT,
+                                 flush_bottom_left=True)
         quality = 95 if filename == OUTPUT_IMAGE else 90
         composite.save(filename, "JPEG", quality=quality, optimize=True)
         print(f"[save] {filename}: {width}x{height} (q{quality})")
