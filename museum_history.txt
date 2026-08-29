@@ -1,4 +1,3 @@
-musée toulouse-lautrec
 cleveland museum of art
 musée d'orsay
 musée des beaux-arts de pau
@@ -6,3 +5,4 @@ rijksmuseum
 department of paintings of the louvre
 victoria and albert museum
 smk — national gallery of denmark
+the met
