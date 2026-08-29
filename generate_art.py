@@ -67,6 +67,19 @@ LAST_UPDATE_FILE = "last_update.txt"
 MUSEUM_HISTORY_FILE = "museum_history.txt"  # список последних показанных музеев
 MUSEUM_HISTORY_SIZE = 8  # не повторять музей, если он был в последних N показах
 
+ARTIST_HISTORY_FILE = "artist_history.txt"  # список последних показанных авторов
+ARTIST_HISTORY_SIZE = 5  # не повторять автора, если он был в последних N показах
+
+# Ключевые слова в НАЗВАНИИ, по которым работу считаем портретом. Wikidata
+# отсекает портреты по жанру (P136), но SMK/V&A/Met/Cleveland жанр не отдают —
+# поэтому дополнительно ловим портреты по названию на разных языках.
+PORTRAIT_TITLE_WORDS = (
+    "portrait", "portræt", "portrett", "portret", "porträt", "bildnis",
+    "self-portrait", "selvportræt", "selbstbildnis", "selfportrait",
+    "head of a", "bust of", "effigy of",
+    "портрет", "автопортрет",
+)
+
 # Сетевые параметры
 HTTP_TIMEOUT = 30
 MAX_RETRIES = 3          # число повторов на один HTTP-запрос
@@ -613,10 +626,15 @@ def wikidata_candidates():
     bindings = []
     chosen_qid = None
     for qid in qids[:EURO_QUERY_ATTEMPTS]:
+        # MINUS отсекает работы жанра «портрет» (Q134307) и «автопортрет»
+        # (Q1400853) — пользователь просил динамичные/сюжетные сцены, а не
+        # вереницу портретов. Прочие жанры (сюжетная, историческая, батальная,
+        # религиозная живопись, гравюры) остаются.
         sparql = (
             "SELECT ?item ?itemLabel ?img ?inception ?collLabel ?countryLabel WHERE { "
             "VALUES ?type { wd:Q3305213 wd:Q11060274 wd:Q11835431 } "
             "?item wdt:P31 ?type; wdt:P170 wd:%s; wdt:P18 ?img. "
+            "MINUS { ?item wdt:P136 ?g. VALUES ?g { wd:Q134307 wd:Q1400853 } } "
             "OPTIONAL { ?item wdt:P195 ?coll. OPTIONAL { ?coll wdt:P17 ?country. } } "
             "OPTIONAL { ?item wdt:P571 ?inception. } "
             'SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } '
@@ -718,6 +736,37 @@ def save_recent_museum(source):
         print(f"[history] не удалось сохранить историю музеев: {error}")
 
 
+def _artist_key(artist):
+    """Нормализует имя автора для сравнения в истории."""
+    return re.sub(r"\s+", " ", str(artist or "").strip()).lower()
+
+
+def load_recent_artists():
+    """Читает список недавно показанных авторов (ключи), старые — первыми."""
+    try:
+        lines = Path(ARTIST_HISTORY_FILE).read_text(encoding="utf-8").splitlines()
+        return [ln.strip() for ln in lines if ln.strip()]
+    except Exception:
+        return []
+
+
+def save_recent_artist(artist):
+    """Добавляет автора в историю и подрезает её до ARTIST_HISTORY_SIZE."""
+    history = load_recent_artists()
+    history.append(_artist_key(artist))
+    history = history[-ARTIST_HISTORY_SIZE:]
+    try:
+        Path(ARTIST_HISTORY_FILE).write_text("\n".join(history) + "\n", encoding="utf-8")
+    except Exception as error:
+        print(f"[history] не удалось сохранить историю авторов: {error}")
+
+
+def _looks_like_portrait(title):
+    """True, если название работы выглядит как портрет (для источников без жанра)."""
+    text = str(title or "").lower()
+    return any(word in text for word in PORTRAIT_TITLE_WORDS)
+
+
 def get_random_artwork_bytes():
     """Пробует источники по очереди и возвращает (artwork_dict, image_bytes).
 
@@ -743,21 +792,33 @@ def get_random_artwork_bytes():
         print(f"[выбор] Приоритет: музеи США (доля {1 - EUROPEAN_SHARE:.0%})")
 
     recent = set(load_recent_museums())
+    recent_artists = set(load_recent_artists())
     print(f"[выбор] Недавние музеи (пропускаются): {sorted(recent) or '—'}")
+    print(f"[выбор] Недавние авторы (пропускаются): {sorted(recent_artists) or '—'}")
 
     last_error = None
     tried = 0
 
-    # Проход 1 — только «свежие» музеи; проход 2 — резерв без учёта истории.
+    # Проход 1 — строгий: свежий музей, свежий автор, БЕЗ портретов.
+    # Проход 2 — резерв: игнорируем историю и фильтр портретов, лишь бы экран
+    # не остался пустым (например, когда временно работает один источник).
     for enforce_fairness in (True, False):
         if not enforce_fairness:
-            print("\n[выбор] Свежих музеев не нашлось — резервный проход без фильтра истории.")
+            print("\n[выбор] Строгий проход не дал результата — резервный проход "
+                  "без фильтров истории/портретов.")
         for provider in providers:
             print(f"\n=== Источник: {provider.__name__} (fairness={enforce_fairness}) ===")
             for artwork in provider():
-                if enforce_fairness and _museum_key(artwork["source"]) in recent:
-                    print(f"[fair-skip] {artwork['source']} — недавно показан")
-                    continue
+                if enforce_fairness:
+                    if _museum_key(artwork["source"]) in recent:
+                        print(f"[fair-skip] {artwork['source']} — музей недавно показан")
+                        continue
+                    if _artist_key(artwork.get("artist")) in recent_artists:
+                        print(f"[fair-skip] {artwork.get('artist')} — автор недавно показан")
+                        continue
+                    if _looks_like_portrait(artwork.get("title")):
+                        print(f"[fair-skip] «{artwork.get('title')}» — похоже на портрет")
+                        continue
                 tried += 1
                 try:
                     image_bytes = download_image_bytes(
@@ -766,6 +827,7 @@ def get_random_artwork_bytes():
                     print(f"[ok] Изображение получено из {artwork['source']}: "
                           f"{artwork['title']} ({len(image_bytes)} байт)")
                     save_recent_museum(artwork["source"])
+                    save_recent_artist(artwork.get("artist"))
                     return artwork, image_bytes
                 except Exception as error:
                     last_error = error
@@ -858,16 +920,11 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True):
     src = source.convert("RGB")
     w, h = src.size
 
-    # Безопасное поле: вписываем картину не в весь кадр, а в НЕМНОГО уменьшенную
-    # область, чтобы рамка дисплея (bezel) и скруглённое превью SenseCraft не
-    # срезали края изображения. Свободное место — чёрные поля вокруг.
-    inset_x = int(round(target_w * SAFE_INSET_FRAC))
-    inset_y = int(round(target_h * SAFE_INSET_FRAC))
-    avail_w = max(1, target_w - 2 * inset_x)
-    avail_h = max(1, target_h - 2 * inset_y)
-
-    # Масштаб «вписать целиком»: по меньшему коэффициенту, чтобы всё поместилось.
-    factor = min(avail_w / w, avail_h / h)
+    # Картина заполняет ВЕСЬ кадр (contain, без дополнительных чёрных полей):
+    # никакого лишнего отступа сверху/снизу — только естественный letterbox/
+    # pillarbox там, где пропорции картины не совпадают с 800x480. Подпись при
+    # этом всё равно держим выше зоны обрезки дисплея (см. draw_caption).
+    factor = min(target_w / w, target_h / h)
     new_w = max(1, int(round(w * factor)))
     new_h = max(1, int(round(h * factor)))
     resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
@@ -967,11 +1024,10 @@ def draw_caption(image, lines, scale):
     x2 = x1 + box_w
     y2 = y1 + box_h
 
-    # ПРОЗРАЧНАЯ плашка: картина хорошо просматривается сквозь неё. Читаемость
-    # текста обеспечивает не плашка, а ЧЁРНАЯ ОБВОДКА вокруг белых букв — она
-    # держит текст на любом фоне даже там, где полупрозрачная плашка после
-    # квантования к 6 цветам «растворяется».
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 90))
+    # Плотная (почти непрозрачная) чёрная плашка под текстом — как раньше:
+    # она гарантированно читается на любом фоне и не «растворяется» после
+    # квантования к 6 цветам. Дополнительно буквы имеют чёрную обводку.
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(0, 0, 0, 200))
 
     stroke = max(int(round(2 * scale)), 2)  # толщина чёрной обводки букв
     cursor_y = y1 + pad_y
