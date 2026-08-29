@@ -215,11 +215,14 @@ FAMOUS_ARTISTS = [
     "Canaletto", "Henri de Toulouse-Lautrec", "Henri Rousseau",
     "Gustav Klimt", "Albrecht Durer", "Hans Holbein the Younger",
     "Nicolas de Stael", "Georges de La Tour", "Jean-Baptiste-Simeon Chardin",
-    # Пейзажисты и маринисты (против портретов)
-    "John Constable", "Jacob van Ruisdael", "Caspar David Friedrich",
-    "Ivan Aivazovsky", "William Turner", "Albert Bierstadt",
-    # Натюрмортщики
-    "Willem Claesz Heda", "Pieter Claesz", "Jan Davidsz de Heem",
+    # Мастера ДИНАМИЧНЫХ, повествовательных сцен: события, драма, движение,
+    # история, войны, мифы, фантазия, ад/рай, видения и кошмары.
+    "Peter Paul Rubens", "Eugene Delacroix", "Theodore Gericault",
+    "Jacques-Louis David", "Caravaggio", "Tintoretto", "Paolo Veronese",
+    "Hieronymus Bosch", "Pieter Bruegel the Elder", "William Blake",
+    "Henry Fuseli", "Gustave Dore", "John Martin", "Francisco Goya",
+    "Peter von Cornelius", "Benjamin West", "Jean-Leon Gerome",
+    "Ilya Repin", "Vasily Surikov", "Karl Bryullov", "Rembrandt van Rijn",
 ]
 
 # Wikidata QID знаменитых европейских мастеров. Через Wikidata мы получаем
@@ -254,16 +257,17 @@ ARTIST_QIDS = {
     "Q7751": "Giuseppe Arcimboldo",     # головы из фруктов/рыб, маньеризм
     "Q154338": "Matthias Grünewald",    # Изенгеймский алтарь, распятие с ужасами
     "Q6682": "Gustave Doré",            # иллюстратор "Ада" Данте (гравюры)
-    # Пейзажисты и маринисты (разнообразие против портретов)
-    "Q159183": "John Constable",        # английские пейзажи
-    "Q213612": "Jacob van Ruisdael",    # голландские пейзажи
-    "Q104270": "Caspar David Friedrich", # романтические пейзажи
-    "Q181568": "Ivan Aivazovsky",       # марины, морские виды
-    "Q45006": "Albert Bierstadt",       # американские пейзажи (но европеец по рождению)
-    # Натюрмортщики
-    "Q454671": "Willem Claesz Heda",    # голландский натюрморт
-    "Q314548": "Pieter Claesz",         # голландский натюрморт
-    "Q161348": "Jan Davidsz de Heem",   # голландский/фламандский натюрморт
+    # Мастера ДИНАМИЧНЫХ сцен: битвы, драма, движение, история, мифы, фантазия
+    "Q184212": "Theodore Gericault",    # "Плот Медузы", катастрофы, движение
+    "Q83155": "Jacques-Louis David",    # революция, античная драма, клятвы
+    "Q9319": "Tintoretto",              # барочная динамика, вихревые композиции
+    "Q9440": "Paolo Veronese",          # пиры, толпы, монументальные сцены
+    "Q212499": "Jean-Leon Gerome",      # гладиаторы, восточные сцены, история
+    "Q172911": "Ilya Repin",            # народные события, драма, движение
+    "Q110228": "Vasily Surikov",        # русская история, казни, восстания
+    "Q4768": "Karl Bryullov",           # "Последний день Помпеи", катастрофы
+    "Q937096": "John Martin",           # апокалипсис, гибель городов, ад/рай
+    "Q313498": "Benjamin West",         # исторические сражения, "Смерть Вольфа"
 }
 
 # Страны, музеи которых считаем «европейскими/евразийскими» (по названию из Wikidata).
@@ -283,11 +287,15 @@ EUROPEAN_COUNTRIES = {
 # Резервные тематические запросы (если по конкретному мастеру ничего не нашли) —
 # тоже смещены в сторону европейской классической живописи.
 FALLBACK_TERMS = [
-    "European painting", "old master painting", "impressionism painting",
-    "baroque painting", "renaissance painting",
-    "landscape oil painting", "still life oil painting", "genre painting",
-    "mythology painting", "religious painting", "seascape painting",
-    "interior scene painting", "battle scene painting", "veduta painting",
+    "old master painting", "baroque painting", "romanticism painting",
+    # ДИНАМИКА: события, действие, драма, движение
+    "history painting", "battle painting", "shipwreck painting",
+    "mythology painting", "biblical scene painting",
+    # Фантазия, видения, ад и рай, кошмары
+    "apocalypse painting", "hell and heaven painting", "vision painting",
+    "allegory painting", "the last judgment painting",
+    # Сюжеты из книг, истории, войн, городов
+    "Dante Inferno painting", "siege city painting", "revolution painting",
 ]
 
 # Европейские отделы The Met — сильно повышают шанс попасть на «светил».
