@@ -1,4 +1,3 @@
-kunsthaus zürich
 the met
 national gallery
 victoria and albert museum
@@ -6,3 +5,4 @@ demidov collection
 smk — national gallery of denmark
 duke of westminster collection
 musée d'orsay
+cleveland museum of art
