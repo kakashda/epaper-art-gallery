@@ -18,6 +18,15 @@ REFRESH_INTERVAL_MINUTES = 2
 OUTPUT_WIDTH = 800
 OUTPUT_HEIGHT = 480
 
+# «Безопасное поле» (safe area). На физическом e-paper пластиковая рамка (bezel)
+# перекрывает крайние пиксели экрана, а превью SenseCraft HMI скругляет углы и
+# тоже подрезает края. Из-за этого картинка «впритык» к краям выглядела как
+# обрезанная/зумленная, а подпись у самого низа (margin=0) пряталась под рамкой.
+# Поэтому и картину, и подпись держим не вплотную к краям, а внутри области,
+# уменьшенной на этот процент с каждой стороны. 0.05 = 5% (≈40px по ширине,
+# ≈24px по высоте) — рамка гарантированно ничего не срезает.
+SAFE_INSET_FRAC = 0.05
+
 # --- Главный файл под E1002 (SenseCraft HMI, ручная загрузка) ---------------
 # E1002 — это полноцветный E Ink Spectra 6 (ACeP). Панель физически умеет
 # показывать ТОЛЬКО 6 чистых цветов (без градаций серого). Поэтому мы сами
@@ -842,8 +851,16 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True):
     src = source.convert("RGB")
     w, h = src.size
 
+    # Безопасное поле: вписываем картину не в весь кадр, а в НЕМНОГО уменьшенную
+    # область, чтобы рамка дисплея (bezel) и скруглённое превью SenseCraft не
+    # срезали края изображения. Свободное место — чёрные поля вокруг.
+    inset_x = int(round(target_w * SAFE_INSET_FRAC))
+    inset_y = int(round(target_h * SAFE_INSET_FRAC))
+    avail_w = max(1, target_w - 2 * inset_x)
+    avail_h = max(1, target_h - 2 * inset_y)
+
     # Масштаб «вписать целиком»: по меньшему коэффициенту, чтобы всё поместилось.
-    factor = min(target_w / w, target_h / h)
+    factor = min(avail_w / w, avail_h / h)
     new_w = max(1, int(round(w * factor)))
     new_h = max(1, int(round(h * factor)))
     resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
@@ -905,8 +922,10 @@ def draw_caption(image, lines, scale):
     draw = ImageDraw.Draw(overlay)
     W, H = image.size
 
-    # Плашка начинается ровно в левом нижнем углу кадра (без отступа от краёв).
-    margin = 0
+    # Подпись держим внутри безопасного поля (не вплотную к краям), иначе рамка
+    # дисплея (bezel) и скруглённое превью SenseCraft срезают её у нижнего края.
+    margin_x = max(int(round(SAFE_INSET_FRAC * W)), 8)
+    margin_y = max(int(round(SAFE_INSET_FRAC * H)), 8)
     pad_x = max(int(round(12 * scale)), 8)
     pad_y = max(int(round(9 * scale)), 6)
     gap = max(int(round(5 * scale)), 3)
@@ -935,8 +954,8 @@ def draw_caption(image, lines, scale):
 
     box_w = min(max_text_w + pad_x * 2, int(W * 0.72))
     box_h = total_h + pad_y * 2
-    x1 = margin
-    y1 = H - box_h - margin
+    x1 = margin_x
+    y1 = H - box_h - margin_y
     x2 = x1 + box_w
     y2 = y1 + box_h
 
