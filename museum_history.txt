@@ -1,4 +1,3 @@
-thirlestane castle
 kröller-müller museum
 british museum
 the met
@@ -6,3 +5,4 @@ vlaamse kunstcollectie
 victoria and albert museum
 unterlinden museum
 department of paintings of the louvre
+cleveland museum of art
