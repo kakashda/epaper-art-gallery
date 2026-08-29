@@ -801,40 +801,25 @@ def upscale_if_needed(img, target_w, target_h):
     return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
 
-# Порог обрезки: если для полного заполнения экрана нужно обрезать не более
-# чем в CROP_LIMIT раз сильнее, чем при вписывании целиком, — заполняем экран
-# (cover, БЕЗ чёрных полей). Иначе вписываем целиком (contain, с полями), чтобы
-# у портретов/панорам не терялась половина картины.
-CROP_LIMIT = 1.5
-
-
 def process_image_to_canvas(source, target_w, target_h):
-    """Готовит кадр заданного разрешения, максимально используя экран.
+    """Готовит кадр заданного разрешения БЕЗ обрезки (contain + поля).
 
-    Умная логика:
-      • Если пропорции картины близки к экрану (5:3) — ЗАПОЛНЯЕМ весь экран
-        (cover): картина крупная, БЕЗ чёрных полей, обрезаются только небольшие
-        края по центру. Это то, о чём просил пользователь — максимальный размер.
-      • Если пропорции сильно отличаются (портрет/узкая панорама) — вписываем
-        ЦЕЛИКОМ (contain), добавляя чёрные поля, чтобы не срезать половину
-        полотна. Чёрный — родной цвет панели Spectra 6, поля выглядят аккуратно.
+    Картина вписывается ЦЕЛИКОМ: масштабируется по меньшему коэффициенту, а
+    свободное место заполняется чёрными полями (чёрный — родной цвет панели
+    Spectra 6, поэтому поля выглядят аккуратно). Так ничего не срезается.
 
     `source` — уже открытое и приведённое к RGB изображение (PIL.Image).
     """
     src = source.convert("RGB")
     w, h = src.size
 
-    factor_contain = min(target_w / w, target_h / h)  # вписать целиком
-    factor_cover = max(target_w / w, target_h / h)    # заполнить экран
-    crop_ratio = factor_cover / factor_contain        # насколько сильнее обрезка
-
-    factor = factor_cover if crop_ratio <= CROP_LIMIT else factor_contain
+    # Масштаб «вписать целиком»: по меньшему коэффициенту, чтобы всё поместилось.
+    factor = min(target_w / w, target_h / h)
     new_w = max(1, int(round(w * factor)))
     new_h = max(1, int(round(h * factor)))
     resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
 
-    # Холст целевого размера; при cover лишнее уходит за края (центр-кроп),
-    # при contain по бокам/сверху-снизу остаются чёрные поля.
+    # Чёрный холст целевого размера, картина по центру (letterbox / pillarbox).
     canvas = Image.new("RGB", (target_w, target_h), (0, 0, 0))
     off_x = (target_w - new_w) // 2
     off_y = (target_h - new_h) // 2
@@ -1056,14 +1041,14 @@ def create_image(artwork, image_bytes):
     lines = build_caption_lines(artwork)
 
     # --- Главный файл под E1002: 800x480, 6 цветов Spectra 6 ---
-    # ПОРЯДОК ВАЖЕН: сначала сглаживаем+квантуем САМУ картину (без текста), затем
-    # поверх готового 6-цветного изображения рисуем подпись и делаем финальный
-    # снап к палитре. Так сглаживание против «крупы» не касается текста —
-    # буквы остаются идеально чёткими, а плашка выглядит прозрачной.
+    # БЕЗ «улучшайзинга»: только подгоняем размер, рисуем подпись и делаем
+    # снап к 6 цветам панели (nearest color, БЕЗ дизеринга). Никакой
+    # гаммы/насыщенности/тёплого сдвига/медианного фильтра — изображение НЕ
+    # портим, отдаём максимально близко к оригиналу. Снап к 6 цветам —
+    # единственное необходимое: панель физически показывает только 6 цветов.
     base = process_image_to_canvas(source, OUTPUT_WIDTH, OUTPUT_HEIGHT)
-    spectra = to_spectra6(base)                        # сглаживание + квантование
-    captioned = draw_caption(spectra, lines, scale=1.0)  # подпись с обводкой
-    spectra = _quantize_to_palette(captioned)         # финальный снап к 6 цветам
+    captioned = draw_caption(base, lines, scale=1.0)   # подпись с обводкой
+    spectra = _quantize_to_palette(captioned)          # снап к 6 цветам
     # PNG обязательно (lossless) — JPEG размыл бы чёткие границы цветов.
     spectra.save(OUTPUT_PNG, "PNG", optimize=True)
     print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (Spectra6, 6 цветов)")
