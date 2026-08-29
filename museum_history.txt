@@ -1,4 +1,3 @@
-galleria nazionale d'arte antica
 church of our lady of the chapel
 gemäldegalerie berlin
 dulwich picture gallery
@@ -6,3 +5,4 @@ musée d'orsay
 smk — national gallery of denmark
 museum of fine arts
 kunsthaus zürich
+victoria and albert museum
