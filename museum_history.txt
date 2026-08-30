@@ -1,4 +1,3 @@
-sheffield galleries and museums trust
 museum of fine arts of nancy
 the met
 musée d'orsay
@@ -6,3 +5,4 @@ victoria and albert museum
 scuola grande di san rocco
 royal collection
 kunsthistorisches museum
+bavarian state painting collections
