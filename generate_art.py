@@ -53,12 +53,13 @@ SPECTRA6_PALETTE = [
 
 # JPEG-версии (для веб-превью / других экранов). Для самого E1002 не нужны,
 # но пусть остаются, чтобы index.html и прочее не ломались.
+# Маленькое превью 800x480 (для index.html / e-paper-подобных экранов) —
+# это уменьшение, не апскейл. Полноразмерная версия (current_full.jpg)
+# создаётся отдельно в РОДНОМ максимальном разрешении источника (без апскейла).
 OUTPUT_SIZES = [
     ("current.jpg", 800, 480),
-    ("current_1600.jpg", 1600, 960),
-    ("current_2560.jpg", 2560, 1536),
-    ("current_3840.jpg", 3840, 2304),
 ]
+OUTPUT_FULL = "current_full.jpg"
 
 OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
@@ -898,20 +899,6 @@ def get_font(size, bold=False):
     return ImageFont.load_default()
 
 
-def upscale_if_needed(img, target_w, target_h):
-    """Апскейлит изображение до покрытия целевого размера, если оно меньше."""
-    w, h = img.size
-    if w >= target_w and h >= target_h:
-        return img
-
-    factor = max(target_w / w, target_h / h)
-    new_w = max(int(math.ceil(w * factor)), target_w)
-    new_h = max(int(math.ceil(h * factor)), target_h)
-
-    print(f"[upscale] исходный размер {w}x{h}, upscale -> {new_w}x{new_h} (factor {factor:.2f})")
-    return img.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
-
-
 def process_image_to_canvas(source, target_w, target_h, enhance=True, align_top=False):
     """Готовит кадр заданного разрешения БЕЗ обрезки (contain + поля).
 
@@ -919,9 +906,13 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True, align_top=
     искажения пропорций), а свободное место заполняется чёрными полями. Так
     ничего не срезается и геометрия оригинала сохраняется.
 
-    `enhance` — если True (по умолчанию, для веб-JPEG), слегка повышаем
-    чёткость/контраст/цвет. Если False (для PNG под e-paper), НЕ трогаем
-    изображение вообще — только меняем размер, как просил пользователь.
+    ВАЖНО (по просьбе пользователя):
+      - НИКОГДА не апскейлим. Коэффициент масштаба ограничен 1.0 — если картина
+        мельче целевого размера, берём её как есть (максимум того, что реально
+        отдал музей/база), а не растягиваем в «мыло».
+      - НИКАКОГО сглаживания/резкости/контраста/цвета. Только честный ресайз
+        (при уменьшении) и чёрные поля. Параметр `enhance` оставлен для
+        совместимости сигнатуры, но больше ничего не делает.
 
     `align_top` — если True (для PNG), картина прижимается к ВЕРХУ кадра,
     чёрная полоса остаётся ТОЛЬКО внизу. Если False (по умолчанию, для JPG),
@@ -932,14 +923,17 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True, align_top=
     src = source.convert("RGB")
     w, h = src.size
 
-    # Картина заполняет ВЕСЬ кадр (contain, без дополнительных чёрных полей):
-    # никакого лишнего отступа сверху/снизу — только естественный letterbox/
-    # pillarbox там, где пропорции картины не совпадают с 800x480. Подпись при
-    # этом всё равно держим выше зоны обрезки дисплея (см. draw_caption).
-    factor = min(target_w / w, target_h / h)
+    # Коэффициент вписывания, НО не больше 1.0 — апскейл запрещён. Картина либо
+    # уменьшается до кадра, либо остаётся в родном разрешении (если она меньше).
+    factor = min(target_w / w, target_h / h, 1.0)
     new_w = max(1, int(round(w * factor)))
     new_h = max(1, int(round(h * factor)))
-    resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
+    if (new_w, new_h) != (w, h):
+        # Уменьшаем LANCZOS'ом (это downscale, не апскейл — «мыла» не создаёт).
+        resized = src.resize((new_w, new_h), resample=Image.Resampling.LANCZOS)
+    else:
+        # Родное разрешение — вообще не трогаем пиксели.
+        resized = src
 
     # Чёрный холст целевого размера. По горизонтали всегда центрируем (pillarbox).
     # По вертикали: если align_top=True (PNG), прижимаем к верху (letterbox только
@@ -949,20 +943,8 @@ def process_image_to_canvas(source, target_w, target_h, enhance=True, align_top=
     off_y = 0 if align_top else (target_h - new_h) // 2
     canvas.paste(resized, (off_x, off_y))
 
-    if not enhance:
-        # PNG под e-paper: НИКАКОЙ обработки — только изменённый размер.
-        return canvas
-
-    # Повышаем локальную чёткость и слегка контраст — лучше смотрится на e-paper.
-    final = canvas.filter(ImageFilter.UnsharpMask(radius=1.2, percent=130, threshold=3))
-    try:
-        final = ImageEnhance.Sharpness(final).enhance(1.08)
-        final = ImageEnhance.Contrast(final).enhance(1.04)
-        final = ImageEnhance.Color(final).enhance(1.03)
-    except Exception:
-        pass
-
-    return final
+    # Никакой пост-обработки: отдаём кадр как есть.
+    return canvas
 
 
 def build_caption_lines(artwork):
@@ -1196,14 +1178,26 @@ def create_image(artwork, image_bytes):
     png_image.save(OUTPUT_PNG, "PNG", optimize=True)
     print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (только resize, без обработки)")
 
-    # --- JPEG-версии (полноцветные, для веба и других дисплеев) ---
+    # --- Маленькое превью 800x480 (для index.html) — уменьшение, не апскейл ---
     for filename, width, height in OUTPUT_SIZES:
         canvas = process_image_to_canvas(source, width, height)
         composite = draw_caption(canvas, lines, scale=height / OUTPUT_HEIGHT,
                                  flush_bottom_left=True)
-        quality = 95 if filename == OUTPUT_IMAGE else 90
-        composite.save(filename, "JPEG", quality=quality, optimize=True)
-        print(f"[save] {filename}: {width}x{height} (q{quality})")
+        composite.save(filename, "JPEG", quality=95, optimize=True)
+        print(f"[save] {filename}: {width}x{height} (q95)")
+
+    # --- Полноразмерная версия: РОДНОЕ максимальное разрешение источника ---
+    # Никакого апскейла, никакого сглаживания и НИКАКОГО леттербокса: это просто
+    # сама картина в максимальном разрешении, что реально отдал музей/база, в её
+    # собственной пропорции. Сверху — только подпись в нижнем левом углу.
+    full_source = source.convert("RGB")
+    fw, fh = full_source.size
+    full_composite = draw_caption(full_source, lines,
+                                  scale=fh / OUTPUT_HEIGHT,
+                                  flush_bottom_left=True)
+    full_composite.save(OUTPUT_FULL, "JPEG", quality=95, optimize=True)
+    print(f"[save] {OUTPUT_FULL}: {fw}x{fh} "
+          f"(родное разрешение источника, без апскейла и полей)")
 
     # Для лога/возврата — читабельные строки.
     title = lines[0][1]
