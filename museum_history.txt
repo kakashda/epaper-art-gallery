@@ -1,4 +1,3 @@
-thyssen-bornemisza museum
 cleveland museum of art
 victoria and albert museum
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ schloss ambras innsbruck
 mauritshuis
 hermitage museum
 sheffield galleries and museums trust
+museum of fine arts of nancy
