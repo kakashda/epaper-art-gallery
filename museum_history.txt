@@ -1,4 +1,3 @@
-st bavo's cathedral
 victoria and albert museum
 smk — national gallery of denmark
 royal collection
@@ -6,3 +5,4 @@ cleveland museum of art
 kunsthistorisches museum
 musée d'orsay
 department of paintings of the louvre
+kunsthaus zürich
