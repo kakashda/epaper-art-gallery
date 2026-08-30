@@ -1060,6 +1060,79 @@ def draw_caption(image, lines, scale, flush_bottom_left=False):
     return Image.alpha_composite(image, overlay).convert("RGB")
 
 
+def attach_caption_below(image, lines, scale):
+    """Дорисовывает подпись в ЧЁРНОЙ ПОЛОСЕ ПОД картиной (не поверх неё).
+
+    Само изображение остаётся нетронутым (то же разрешение и качество) — снизу
+    добавляется полоса, а в её левом нижнем углу размещается плашка с текстом.
+    Используется для всех JPG (current.jpg / _1600 / _2560 / _3840).
+
+    `scale` = высота_картины / 480 — чтобы шрифты и отступы были пропорциональны
+    разрешению файла (мелкие на превью, крупные на 4K).
+    """
+    src = image.convert("RGB")
+    W, H = src.size
+
+    # --- Замеряем текст (те же кегли/отступы, что и в draw_caption) ---
+    pad_x = max(int(round(12 * scale)), 8)
+    pad_y = max(int(round(9 * scale)), 6)
+    gap = max(int(round(5 * scale)), 3)
+    radius = max(int(round(6 * scale)), 4)
+
+    fonts = {
+        "title": get_font(max(int(round(20 * scale)), 12), bold=True),
+        "meta": get_font(max(int(round(15 * scale)), 10)),
+        "desc": get_font(max(int(round(13 * scale)), 9)),
+    }
+
+    tmp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    measured = []
+    max_text_w = 0
+    total_h = 0
+    for kind, text in lines:
+        font = fonts[kind]
+        bbox = tmp.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        measured.append((kind, text, font, text_h, bbox[1]))
+        max_text_w = max(max_text_w, text_w)
+        total_h += text_h
+    total_h += gap * (len(measured) - 1)
+
+    box_w = min(max_text_w + pad_x * 2, W)
+    box_h = total_h + pad_y * 2
+
+    # Высота полосы под картиной = высота плашки (плашка занимает всю полосу,
+    # прижата к левому нижнему углу).
+    band_h = box_h
+
+    # Новый холст: картина сверху + чёрная полоса снизу.
+    canvas = Image.new("RGB", (W, H + band_h), (0, 0, 0))
+    canvas.paste(src, (0, 0))
+
+    draw = ImageDraw.Draw(canvas)
+    x1 = 0
+    y1 = H
+    x2 = min(box_w, W)
+    y2 = H + band_h
+    # Плашка на полосе (чуть светлее чёрного фона полосы для отделения).
+    draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(20, 20, 20))
+
+    stroke = max(int(round(2 * scale)), 2)
+    cursor_y = y1 + pad_y
+    for kind, text, font, text_h, top in measured:
+        text_x = x1 + pad_x
+        text_y = cursor_y - top
+        fill = (255, 255, 255) if kind == "title" else (238, 238, 238)
+        draw.text(
+            (text_x, text_y), text, font=font, fill=fill,
+            stroke_width=stroke, stroke_fill=(0, 0, 0),
+        )
+        cursor_y += text_h + gap
+
+    return canvas
+
+
 def _build_palette_image():
     """Создаёт PIL-палитру (P-mode) из SPECTRA6_PALETTE для quantize()."""
     pal_img = Image.new("P", (1, 1))
@@ -1188,37 +1261,45 @@ def create_image(artwork, image_bytes):
     png_image.save(OUTPUT_PNG, "PNG", optimize=True)
     print(f"[save] {OUTPUT_PNG}: {OUTPUT_WIDTH}x{OUTPUT_HEIGHT} (только resize, без обработки)")
 
-    # --- Маленькое превью 800x480 (для index.html) — уменьшение, не апскейл ---
-    for filename, width, height in OUTPUT_SIZES:
-        canvas = process_image_to_canvas(source, width, height)
-        composite = draw_caption(canvas, lines, scale=height / OUTPUT_HEIGHT,
-                                 flush_bottom_left=True)
-        composite.save(filename, "JPEG", quality=95, optimize=True)
-        print(f"[save] {filename}: {width}x{height} (q95)")
-
-    # --- Крупные JPEG-версии: оригинал (3840) + даунскейлы (2560, 1600) ---
-    # Никакого апскейла, никакого сглаживания и НИКАКОГО леттербокса: это сама
-    # картина в собственной пропорции. current_3840.jpg — родное максимальное
-    # разрешение источника; current_2560/1600 — пропорциональный downscale по
-    # большей стороне (или родной размер, если оригинал мельче лимита).
+    # --- JPEG-версии: подпись в чёрной полосе ПОД картиной (не поверх) ---
+    # Для ВСЕХ jpg подпись выносится под изображение, чтобы не перекрывать
+    # произведение. Само изображение остаётся в собственной пропорции и качестве:
+    #   - current_3840.jpg = оригинал в макс. разрешении источника (без апскейла);
+    #   - current_2560/1600.jpg = пропорциональный downscale по большей стороне;
+    #   - current.jpg = маленькое превью для index.html (длинная сторона 800).
+    # Никакого апскейла и никакой пост-обработки — только LANCZOS-downscale.
     rgb_source = source.convert("RGB")
     ow, oh = rgb_source.size
-    for filename, max_side in OUTPUT_LARGE:
+
+    def _downscaled(max_side):
+        """Пропорциональный downscale по большей стороне; без апскейла."""
         if max_side is not None and max(ow, oh) > max_side:
             factor = max_side / max(ow, oh)
             nw = max(1, int(round(ow * factor)))
             nh = max(1, int(round(oh * factor)))
-            img = rgb_source.resize((nw, nh), resample=Image.Resampling.LANCZOS)
-        else:
-            # Оригинал (max_side=None) или источник мельче лимита — как есть.
-            img = rgb_source
-        composite = draw_caption(img, lines, scale=img.size[1] / OUTPUT_HEIGHT,
-                                 flush_bottom_left=True)
+            return rgb_source.resize((nw, nh), resample=Image.Resampling.LANCZOS)
+        return rgb_source
+
+    # Крупные версии (оригинал + даунскейлы).
+    for filename, max_side in OUTPUT_LARGE:
+        img = _downscaled(max_side)
+        composite = attach_caption_below(img, lines,
+                                         scale=img.size[1] / OUTPUT_HEIGHT)
         composite.save(filename, "JPEG", quality=95, optimize=True)
         note = "оригинал, макс. разрешение" if max_side is None else \
             (f"downscale <= {max_side}" if max(ow, oh) > max_side
              else "родной размер (мельче лимита, без апскейла)")
-        print(f"[save] {filename}: {img.size[0]}x{img.size[1]} ({note})")
+        print(f"[save] {filename}: {composite.size[0]}x{composite.size[1]} "
+              f"(картина {img.size[0]}x{img.size[1]}, {note})")
+
+    # Маленькое превью current.jpg (длинная сторона 800) — подпись тоже под низом.
+    for filename, width, height in OUTPUT_SIZES:
+        img = _downscaled(width)
+        composite = attach_caption_below(img, lines,
+                                         scale=img.size[1] / OUTPUT_HEIGHT)
+        composite.save(filename, "JPEG", quality=95, optimize=True)
+        print(f"[save] {filename}: {composite.size[0]}x{composite.size[1]} "
+              f"(превью, картина {img.size[0]}x{img.size[1]})")
 
     # Для лога/возврата — читабельные строки.
     title = lines[0][1]
