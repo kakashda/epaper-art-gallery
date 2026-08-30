@@ -1332,14 +1332,19 @@ def create_image(artwork, image_bytes):
 
 
 def write_html(version):
-    """Страница немедленно открывает готовый JPG (без исполнения JS)."""
+    """Генерирует страницу с УМНЫМ обновлением по факту новой картины.
+
+    Вместо тупого meta-refresh по таймеру страница каждые 60 сек читает
+    last_update.txt и, ТОЛЬКО когда его содержимое реально изменилось (значит
+    GitHub Actions выложил новую картину), перезагружает изображение с новым
+    ?t=... (обход кэша). CSS гарантирует, что картина любого размера всегда
+    помещается на экран целиком (object-fit: contain + max-width/height).
+    """
     html = f"""<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Страница сама перезагружается каждые 2 минуты, чтобы дисплей подхватывал свежую картину. -->
-  <meta http-equiv="refresh" content="120">
   <title>Art Gallery</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -1347,18 +1352,76 @@ def write_html(version):
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #fff;
+      background: #000;
     }}
-    img {{
+    /* Картинка любого размера всегда помещается на экран целиком:
+       object-fit: contain сохраняет пропорции, max-width/height не дают
+       ей вылезти за пределы окна независимо от её геометрии. */
+    #art {{
       display: block;
-      width: 100vw;
-      height: 100vh;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      max-width: 100vw;
+      max-height: 100vh;
+      width: auto;
+      height: auto;
       object-fit: contain;
     }}
   </style>
 </head>
 <body>
-  <img src="current.jpg?v={version}" alt="Artwork">
+  <img id="art" src="current.jpg?v={version}" alt="Artwork">
+
+  <script>
+    // Умное обновление: НЕ по таймеру, а по факту появления новой картины.
+    // Каждые 60 сек читаем last_update.txt; если его содержимое изменилось —
+    // значит GitHub Actions выложил новую картину, и мы перезагружаем ТОЛЬКО
+    // изображение (с новым ?t=... чтобы обойти кэш браузера), без перезагрузки
+    // всей страницы. Стартовое значение берём из ?v= в src, чтобы первая же
+    // проверка не считалась «изменением».
+    (function () {{
+      var img = document.getElementById('art');
+      var CHECK_INTERVAL_MS = 60 * 1000; // как часто проверять last_update.txt
+
+      // Текущая известная версия = то, с чем страница была сгенерирована.
+      var lastSeen = (function () {{
+        var m = /[?&]v=(\\d+)/.exec(img.getAttribute('src') || '');
+        return m ? m[1] : null;
+      }})();
+
+      function reloadImage(version) {{
+        // Меняем src с новым timestamp — браузер скачает свежий current.jpg.
+        img.src = 'current.jpg?t=' + version;
+      }}
+
+      async function checkForUpdate() {{
+        try {{
+          // cache: 'no-store' — всегда тянем реальный last_update.txt, не из кэша.
+          var res = await fetch('last_update.txt?_=' + Date.now(), {{ cache: 'no-store' }});
+          if (!res.ok) return;
+          var version = (await res.text()).trim();
+          if (!version) return;
+
+          if (lastSeen === null) {{
+            // Первый успешный опрос — просто запоминаем текущую версию.
+            lastSeen = version;
+            return;
+          }}
+          if (version !== lastSeen) {{
+            // Появилась новая картина — обновляем изображение.
+            lastSeen = version;
+            reloadImage(version);
+          }}
+        }} catch (e) {{
+          // Сеть недоступна / файл не отдался — молча ждём следующей проверки.
+        }}
+      }}
+
+      setInterval(checkForUpdate, CHECK_INTERVAL_MS);
+    }})();
+  </script>
 </body>
 </html>
 """
