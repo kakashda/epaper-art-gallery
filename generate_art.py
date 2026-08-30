@@ -1376,14 +1376,20 @@ def write_html(version):
 
   <script>
     // Умное обновление: НЕ по таймеру, а по факту появления новой картины.
-    // Каждые 60 сек читаем last_update.txt; если его содержимое изменилось —
+    // Каждые 30 сек читаем last_update.txt; если его содержимое изменилось —
     // значит GitHub Actions выложил новую картину, и мы перезагружаем ТОЛЬКО
     // изображение (с новым ?t=... чтобы обойти кэш браузера), без перезагрузки
     // всей страницы. Стартовое значение берём из ?v= в src, чтобы первая же
     // проверка не считалась «изменением».
+    //
+    // ВАЖНО для мобильного Chrome: в фоне/на неактивной вкладке браузер
+    // «замораживает» setInterval, поэтому по возвращении картинка была бы
+    // устаревшей. Чтобы этого не было, дополнительно проверяем обновление
+    // СРАЗУ при возврате на вкладку (Page Visibility API) и при получении
+    // фокуса окном (focus/pageshow).
     (function () {{
       var img = document.getElementById('art');
-      var CHECK_INTERVAL_MS = 60 * 1000; // как часто проверять last_update.txt
+      var CHECK_INTERVAL_MS = 30 * 1000; // как часто проверять last_update.txt
 
       // Текущая известная версия = то, с чем страница была сгенерирована.
       var lastSeen = (function () {{
@@ -1398,8 +1404,11 @@ def write_html(version):
 
       async function checkForUpdate() {{
         try {{
-          // cache: 'no-store' — всегда тянем реальный last_update.txt, не из кэша.
-          var res = await fetch('last_update.txt?_=' + Date.now(), {{ cache: 'no-store' }});
+          // Усиленный cache-busting: timestamp + случайное число. Некоторые
+          // мобильные браузеры/прокси кэшируют даже при cache:'no-store',
+          // а уникальный URL гарантированно тянет свежий last_update.txt.
+          var bust = Date.now() + '-' + Math.random().toString(36).slice(2);
+          var res = await fetch('last_update.txt?_=' + bust, {{ cache: 'no-store' }});
           if (!res.ok) return;
           var version = (await res.text()).trim();
           if (!version) return;
@@ -1419,7 +1428,22 @@ def write_html(version):
         }}
       }}
 
+      // Периодическая проверка (работает, пока вкладка активна).
       setInterval(checkForUpdate, CHECK_INTERVAL_MS);
+
+      // Возврат на вкладку (Page Visibility API): проверяем немедленно.
+      document.addEventListener('visibilitychange', function () {{
+        if (document.visibilityState === 'visible') {{
+          checkForUpdate();
+        }}
+      }});
+
+      // Окно получило фокус (переключение приложений/вкладок на мобильном).
+      window.addEventListener('focus', checkForUpdate);
+
+      // Возврат из bfcache (кнопка «назад»/восстановление вкладки в мобильном
+      // Chrome часто отдаёт страницу из кэша без повторного запуска таймера).
+      window.addEventListener('pageshow', checkForUpdate);
     }})();
   </script>
 </body>
