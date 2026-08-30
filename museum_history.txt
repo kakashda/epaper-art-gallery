@@ -1,4 +1,3 @@
-gemäldegalerie berlin
 victoria and albert museum
 smk — national gallery of denmark
 musée des beaux-arts de bordeaux
@@ -6,3 +5,4 @@ pushkin museum of fine arts
 kunsthaus zürich
 museo degli innocenti
 scarborough art gallery
+thyssen-bornemisza museum
