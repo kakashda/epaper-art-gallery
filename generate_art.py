@@ -970,7 +970,9 @@ def build_caption_lines(artwork):
     # Третья строка — только МУЗЕЙ (где картина хранится сейчас).
     # Технику/материал ("oil painting", "tempera" и т.п.) НЕ показываем —
     # по просьбе пользователя оставляем название, автора, год и место хранения.
-    source = clean_text(artwork.get("source"), 48)
+    # Лимит намеренно большой: длинное название музея не обрезаем здесь —
+    # перенос по словам на несколько строк делает attach_caption_below.
+    source = clean_text(artwork.get("source"), 200)
 
     desc = source
 
@@ -1090,7 +1092,10 @@ def attach_caption_below(image, lines, scale):
     # Максимальная ширина текста: почти вся ширина картины минус поля. Длинные
     # строки (например длинное название) переносятся по словам на неск. строк,
     # чтобы ничего не обрезалось справа.
-    max_line_w = max(W - pad_x * 2, 1)
+    # Обводка текста (stroke) добавляет ширину с каждой стороны — учитываем её,
+    # чтобы длинные строки гарантированно не вылезали за правый край.
+    stroke = max(int(round(2 * scale)), 2)
+    max_line_w = max(W - pad_x * 2 - stroke * 2, 1)
 
     def wrap(text, font):
         """Переносит text по словам так, чтобы каждая строка влезала в max_line_w."""
@@ -1142,7 +1147,6 @@ def attach_caption_below(image, lines, scale):
     # Плашка на полосе (чуть светлее чёрного фона полосы для отделения).
     draw.rounded_rectangle((x1, y1, x2, y2), radius=radius, fill=(20, 20, 20))
 
-    stroke = max(int(round(2 * scale)), 2)
     cursor_y = y1 + pad_y
     for kind, text, font, text_h, top in measured:
         text_x = x1 + pad_x
@@ -1334,11 +1338,12 @@ def create_image(artwork, image_bytes):
 def write_html(version):
     """Генерирует страницу с УМНЫМ обновлением по факту новой картины.
 
-    Вместо тупого meta-refresh по таймеру страница каждые 60 сек читает
-    last_update.txt и, ТОЛЬКО когда его содержимое реально изменилось (значит
-    GitHub Actions выложил новую картину), перезагружает изображение с новым
-    ?t=... (обход кэша). CSS гарантирует, что картина любого размера всегда
-    помещается на экран целиком (object-fit: contain + max-width/height).
+    Страница каждые 30 сек читает last_update.txt и, ТОЛЬКО когда его
+    содержимое реально изменилось (значит GitHub Actions выложил новую
+    картину), делает ПОЛНУЮ перезагрузку страницы (location.reload) — это
+    надёжнее подмены src на мобильном Chrome. CSS гарантирует, что картина
+    любого размера всегда помещается на экран целиком (object-fit: contain
+    + max-width/height).
     """
     html = f"""<!doctype html>
 <html>
@@ -1375,18 +1380,15 @@ def write_html(version):
   <img id="art" src="current.jpg?v={version}" alt="Artwork">
 
   <script>
-    // Умное обновление: НЕ по таймеру, а по факту появления новой картины.
-    // Каждые 30 сек читаем last_update.txt; если его содержимое изменилось —
-    // значит GitHub Actions выложил новую картину, и мы перезагружаем ТОЛЬКО
-    // изображение (с новым ?t=... чтобы обойти кэш браузера), без перезагрузки
-    // всей страницы. Стартовое значение берём из ?v= в src, чтобы первая же
-    // проверка не считалась «изменением».
+    // Простое и надёжное автообновление (работает на мобильном Chrome):
+    // каждые 30 сек читаем last_update.txt; как только его содержимое
+    // изменилось (значит GitHub Actions выложил новую картину) — делаем
+    // ПОЛНУЮ перезагрузку страницы (location.reload). Полная перезагрузка
+    // надёжнее подмены src: мобильные браузеры гарантированно берут свежие
+    // current.jpg и index.html, без хитростей с кэшем.
     //
-    // ВАЖНО для мобильного Chrome: в фоне/на неактивной вкладке браузер
-    // «замораживает» setInterval, поэтому по возвращении картинка была бы
-    // устаревшей. Чтобы этого не было, дополнительно проверяем обновление
-    // СРАЗУ при возврате на вкладку (Page Visibility API) и при получении
-    // фокуса окном (focus/pageshow).
+    // Дополнительно проверяем СРАЗУ при возврате на вкладку/в приложение
+    // (visibilitychange, focus, pageshow), т.к. в фоне таймер «замораживается».
     (function () {{
       var img = document.getElementById('art');
       var CHECK_INTERVAL_MS = 30 * 1000; // как часто проверять last_update.txt
@@ -1397,16 +1399,10 @@ def write_html(version):
         return m ? m[1] : null;
       }})();
 
-      function reloadImage(version) {{
-        // Меняем src с новым timestamp — браузер скачает свежий current.jpg.
-        img.src = 'current.jpg?t=' + version;
-      }}
-
       async function checkForUpdate() {{
         try {{
-          // Усиленный cache-busting: timestamp + случайное число. Некоторые
-          // мобильные браузеры/прокси кэшируют даже при cache:'no-store',
-          // а уникальный URL гарантированно тянет свежий last_update.txt.
+          // Уникальный URL (timestamp + случайное число) гарантированно тянет
+          // свежий last_update.txt, минуя кэш мобильных браузеров/прокси.
           var bust = Date.now() + '-' + Math.random().toString(36).slice(2);
           var res = await fetch('last_update.txt?_=' + bust, {{ cache: 'no-store' }});
           if (!res.ok) return;
@@ -1419,9 +1415,8 @@ def write_html(version):
             return;
           }}
           if (version !== lastSeen) {{
-            // Появилась новая картина — обновляем изображение.
-            lastSeen = version;
-            reloadImage(version);
+            // Появилась новая картина — полная перезагрузка страницы.
+            location.reload();
           }}
         }} catch (e) {{
           // Сеть недоступна / файл не отдался — молча ждём следующей проверки.
