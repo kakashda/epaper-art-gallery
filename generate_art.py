@@ -1086,17 +1086,41 @@ def attach_caption_below(image, lines, scale):
     }
 
     tmp = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+
+    # Максимальная ширина текста: почти вся ширина картины минус поля. Длинные
+    # строки (например длинное название) переносятся по словам на неск. строк,
+    # чтобы ничего не обрезалось справа.
+    max_line_w = max(W - pad_x * 2, 1)
+
+    def wrap(text, font):
+        """Переносит text по словам так, чтобы каждая строка влезала в max_line_w."""
+        words = text.split()
+        if not words:
+            return [text]
+        result = []
+        cur = words[0]
+        for word in words[1:]:
+            trial = cur + " " + word
+            if tmp.textlength(trial, font=font) <= max_line_w:
+                cur = trial
+            else:
+                result.append(cur)
+                cur = word
+        result.append(cur)
+        return result
+
     measured = []
     max_text_w = 0
     total_h = 0
     for kind, text in lines:
         font = fonts[kind]
-        bbox = tmp.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        measured.append((kind, text, font, text_h, bbox[1]))
-        max_text_w = max(max_text_w, text_w)
-        total_h += text_h
+        for piece in wrap(text, font):
+            bbox = tmp.textbbox((0, 0), piece, font=font)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            measured.append((kind, piece, font, text_h, bbox[1]))
+            max_text_w = max(max_text_w, text_w)
+            total_h += text_h
     total_h += gap * (len(measured) - 1)
 
     box_w = min(max_text_w + pad_x * 2, W)
