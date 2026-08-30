@@ -51,15 +51,25 @@ SPECTRA6_PALETTE = [
     (45, 70, 150),    # синий
 ]
 
-# JPEG-версии (для веб-превью / других экранов). Для самого E1002 не нужны,
-# но пусть остаются, чтобы index.html и прочее не ломались.
 # Маленькое превью 800x480 (для index.html / e-paper-подобных экранов) —
-# это уменьшение, не апскейл. Полноразмерная версия (current_full.jpg)
-# создаётся отдельно в РОДНОМ максимальном разрешении источника (без апскейла).
+# это уменьшение, не апскейл.
 OUTPUT_SIZES = [
     ("current.jpg", 800, 480),
 ]
-OUTPUT_FULL = "current_full.jpg"
+
+# Крупные JPEG-версии. ВАЖНО (по просьбе пользователя):
+#   - current_3840.jpg — ОРИГИНАЛ в максимальном разрешении, что реально отдал
+#     музей/база. НИКАКОГО апскейла (max_side=None), никаких чёрных полей и
+#     никакой пост-обработки — только сама картина + подпись. Имя остаётся
+#     "current_3840.jpg" независимо от фактического размера.
+#   - current_2560.jpg / current_1600.jpg — пропорциональный ДАУНСКЕЙЛ оригинала
+#     (по большей стороне). Если оригинал мельче лимита — оставляем как есть
+#     (апскейл запрещён). Каждый (имя, макс. сторона):
+OUTPUT_LARGE = [
+    ("current_3840.jpg", None),   # оригинал, максимальное разрешение
+    ("current_2560.jpg", 2560),   # даунскейл, большая сторона <= 2560
+    ("current_1600.jpg", 1600),   # даунскейл, большая сторона <= 1600
+]
 
 OUTPUT_IMAGE = "current.jpg"
 OUTPUT_HTML = "index.html"
@@ -1186,18 +1196,29 @@ def create_image(artwork, image_bytes):
         composite.save(filename, "JPEG", quality=95, optimize=True)
         print(f"[save] {filename}: {width}x{height} (q95)")
 
-    # --- Полноразмерная версия: РОДНОЕ максимальное разрешение источника ---
-    # Никакого апскейла, никакого сглаживания и НИКАКОГО леттербокса: это просто
-    # сама картина в максимальном разрешении, что реально отдал музей/база, в её
-    # собственной пропорции. Сверху — только подпись в нижнем левом углу.
-    full_source = source.convert("RGB")
-    fw, fh = full_source.size
-    full_composite = draw_caption(full_source, lines,
-                                  scale=fh / OUTPUT_HEIGHT,
-                                  flush_bottom_left=True)
-    full_composite.save(OUTPUT_FULL, "JPEG", quality=95, optimize=True)
-    print(f"[save] {OUTPUT_FULL}: {fw}x{fh} "
-          f"(родное разрешение источника, без апскейла и полей)")
+    # --- Крупные JPEG-версии: оригинал (3840) + даунскейлы (2560, 1600) ---
+    # Никакого апскейла, никакого сглаживания и НИКАКОГО леттербокса: это сама
+    # картина в собственной пропорции. current_3840.jpg — родное максимальное
+    # разрешение источника; current_2560/1600 — пропорциональный downscale по
+    # большей стороне (или родной размер, если оригинал мельче лимита).
+    rgb_source = source.convert("RGB")
+    ow, oh = rgb_source.size
+    for filename, max_side in OUTPUT_LARGE:
+        if max_side is not None and max(ow, oh) > max_side:
+            factor = max_side / max(ow, oh)
+            nw = max(1, int(round(ow * factor)))
+            nh = max(1, int(round(oh * factor)))
+            img = rgb_source.resize((nw, nh), resample=Image.Resampling.LANCZOS)
+        else:
+            # Оригинал (max_side=None) или источник мельче лимита — как есть.
+            img = rgb_source
+        composite = draw_caption(img, lines, scale=img.size[1] / OUTPUT_HEIGHT,
+                                 flush_bottom_left=True)
+        composite.save(filename, "JPEG", quality=95, optimize=True)
+        note = "оригинал, макс. разрешение" if max_side is None else \
+            (f"downscale <= {max_side}" if max(ow, oh) > max_side
+             else "родной размер (мельче лимита, без апскейла)")
+        print(f"[save] {filename}: {img.size[0]}x{img.size[1]} ({note})")
 
     # Для лога/возврата — читабельные строки.
     title = lines[0][1]
