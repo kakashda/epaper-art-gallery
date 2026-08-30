@@ -1,4 +1,3 @@
-laing art gallery
 the met
 russian museum
 gemäldegalerie berlin
@@ -6,3 +5,4 @@ victoria and albert museum
 smk — national gallery of denmark
 musée des beaux-arts de bordeaux
 pushkin museum of fine arts
+kunsthaus zürich
