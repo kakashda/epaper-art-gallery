@@ -1,4 +1,3 @@
-royal collection
 cleveland museum of art
 kunsthistorisches museum
 musée d'orsay
@@ -6,3 +5,4 @@ department of paintings of the louvre
 kunsthaus zürich
 national gallery
 victoria and albert museum
+musée des beaux-arts de rouen
