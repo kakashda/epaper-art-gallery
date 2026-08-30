@@ -589,8 +589,9 @@ def vam_candidates():
         base = images.get("_iiif_image_base_url")
         if not base:
             continue
-        # IIIF: вписываем в 2000px по большей стороне — хорошее качество для 4K-версии.
-        image_url = base.rstrip("/") + "/full/!2000,2000/0/default.jpg"
+        # IIIF: просим до 4000px по большей стороне — чтобы 4K-версия
+        # (3840x2304) получала настоящую детализацию, а не апскейл.
+        image_url = base.rstrip("/") + "/full/!4000,4000/0/default.jpg"
 
         maker = rec.get("_primaryMaker") or {}
         artist = _clean_meta(maker.get("name")) or "Unknown artist"
@@ -669,10 +670,11 @@ def wikidata_candidates():
         img = row.get("img", {}).get("value")
         if not img:
             continue
-        # Commons Special:FilePath — просим масштабированную версию (до 2600px),
-        # чтобы не тянуть гигантские TIFF/оригиналы.
+        # Commons Special:FilePath — просим масштабированную версию до 4000px:
+        # достаточно для настоящей 4K-версии (3840x2304), но всё ещё не тянем
+        # гигантские оригиналы TIFF целиком.
         sep = "&" if "?" in img else "?"
-        image_url = f"{img}{sep}width=2600"
+        image_url = f"{img}{sep}width=4000"
 
         museum = _clean_meta(row.get("collLabel", {}).get("value"))
         country = _clean_meta(row.get("countryLabel", {}).get("value"))
