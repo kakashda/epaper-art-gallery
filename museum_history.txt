@@ -1,4 +1,3 @@
-musée d'orsay
 tate
 donetsk regional museum of art
 ny carlsberg glyptotek
@@ -6,3 +5,4 @@ regional museum of messina
 st bavo's cathedral
 victoria and albert museum
 smk — national gallery of denmark
+royal collection
