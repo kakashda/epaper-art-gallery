@@ -1,4 +1,3 @@
-galleria palatina
 frans hals museum
 chester beatty library
 royal collection
@@ -6,3 +5,4 @@ the met
 smk — national gallery of denmark
 victoria and albert museum
 cleveland museum of art
+mauritshuis
