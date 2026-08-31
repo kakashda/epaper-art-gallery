@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 victoria and albert museum
 cleveland museum of art
 mauritshuis
@@ -6,3 +5,4 @@ rijksmuseum
 museo del prado
 musée d'orsay
 cleveland museum of art
+st bavo's cathedral
