@@ -1,4 +1,3 @@
-leopold museum
 victoria and albert museum
 smk — national gallery of denmark
 thyssen-bornemisza museum
@@ -6,3 +5,4 @@ department of paintings of the louvre
 museo del prado
 musée toulouse-lautrec
 eugène-delacroix national museum
+harris manchester college
