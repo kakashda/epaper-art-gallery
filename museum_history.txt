@@ -1,4 +1,3 @@
-musée d'orsay
 uffizi gallery
 rijksmuseum
 tate
@@ -6,3 +5,4 @@ leopold museum
 victoria and albert museum
 smk — national gallery of denmark
 thyssen-bornemisza museum
+department of paintings of the louvre
