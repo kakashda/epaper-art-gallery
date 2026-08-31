@@ -1,4 +1,3 @@
-kelvingrove art gallery and museum
 national gallery
 department of paintings of the louvre
 musée grobet-labadié
@@ -6,3 +5,4 @@ russian museum
 musée d'orsay
 uffizi gallery
 rijksmuseum
+tate
