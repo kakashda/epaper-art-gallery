@@ -1,4 +1,3 @@
-the met
 smk — national gallery of denmark
 strasbourg museum of modern and contemporary art
 städel museum
@@ -6,3 +5,4 @@ kupferstichkabinett berlin
 kunsthaus zürich
 victoria and albert museum
 freies deutsches hochstift
+st bavo's cathedral
