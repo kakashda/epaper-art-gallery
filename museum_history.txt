@@ -1,4 +1,3 @@
-tretyakov gallery
 centraal museum
 musée des beaux-arts de bordeaux
 department of paintings of the louvre
@@ -6,3 +5,4 @@ ny carlsberg glyptotek
 victoria and albert museum
 smk — national gallery of denmark
 cleveland museum of art
+kaiser friedrich museumsverein (kfmv)
