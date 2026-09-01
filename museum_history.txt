@@ -1,4 +1,3 @@
-ny carlsberg glyptotek
 victoria and albert museum
 smk — national gallery of denmark
 cleveland museum of art
@@ -6,3 +5,4 @@ kaiser friedrich museumsverein (kfmv)
 bavarian state painting collections
 the met
 museum of fine arts of nancy
+smk — national gallery of denmark
