@@ -1,4 +1,3 @@
-the met
 museum of fine arts of nancy
 smk — national gallery of denmark
 museo del prado
@@ -6,3 +5,4 @@ victoria and albert museum
 tate
 musée d'orsay
 courtauld institute of art
+mauritshuis
