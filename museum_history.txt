@@ -1,4 +1,3 @@
-laing art gallery
 museo del prado
 cleveland museum of art
 british museum
@@ -6,3 +5,4 @@ department of paintings of the louvre
 städel museum
 musée toulouse-lautrec
 apsley house
+victoria and albert museum
