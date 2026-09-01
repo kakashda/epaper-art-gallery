@@ -1,4 +1,3 @@
-cleveland museum of art
 british museum
 department of paintings of the louvre
 städel museum
@@ -6,3 +5,4 @@ musée toulouse-lautrec
 apsley house
 victoria and albert museum
 san luigi dei francesi
+smk — national gallery of denmark
