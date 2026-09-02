@@ -1,4 +1,3 @@
-castle huis bergh
 bavarian state painting collections
 gemäldegalerie berlin
 victoria and albert museum
@@ -6,3 +5,4 @@ musée d'orsay
 national galleries scotland
 tate
 condé museum
+foundation e.g. bührle collection
