@@ -1,4 +1,3 @@
-victoria and albert museum
 musée d'orsay
 national galleries scotland
 tate
@@ -6,3 +5,4 @@ condé museum
 foundation e.g. bührle collection
 nationalmuseum
 smk — national gallery of denmark
+scientific-research museum of the russian academy of arts
