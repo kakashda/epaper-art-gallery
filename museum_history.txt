@@ -1,4 +1,3 @@
-royal shakespeare theatre
 victoria and albert museum
 national gallery
 villa ludovisi
@@ -6,3 +5,4 @@ cleveland museum of art
 smk — national gallery of denmark
 mauritshuis
 castle huis bergh
+bavarian state painting collections
