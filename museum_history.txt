@@ -1,4 +1,3 @@
-städel museum
 victoria and albert museum
 staatliche kunsthalle karlsruhe
 st bavo's cathedral
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 museo del prado
 courtauld gallery
 nationalmuseum
+the met
