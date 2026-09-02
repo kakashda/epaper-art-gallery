@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 mauritshuis
 castle huis bergh
 bavarian state painting collections
@@ -6,3 +5,4 @@ gemäldegalerie berlin
 victoria and albert museum
 musée d'orsay
 national galleries scotland
+tate
