@@ -1,4 +1,3 @@
-strasbourg museum of modern and contemporary art
 victoria and albert museum
 department of paintings of the louvre
 cleveland museum of art
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 apsley house
 hospital de la caridad de illescas
 musée d'orsay
+borghese collection
