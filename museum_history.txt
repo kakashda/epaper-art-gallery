@@ -1,4 +1,3 @@
-kunsthistorisches museum
 kunsthaus zürich
 victoria and albert museum
 belvedere
@@ -6,3 +5,4 @@ russian museum
 the met
 musée d'orsay
 uffizi gallery
+smk — national gallery of denmark
