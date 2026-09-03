@@ -1,4 +1,3 @@
-department of paintings of the louvre
 smk — national gallery of denmark
 musée des beaux-arts de bordeaux
 kupferstich-kabinett dresden
@@ -6,3 +5,4 @@ museum de lakenhal
 kunsthistorisches museum
 victoria and albert museum
 musée d'orsay
+staatsgalerie stuttgart
