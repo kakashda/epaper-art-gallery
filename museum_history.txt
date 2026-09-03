@@ -1,4 +1,3 @@
-demidov collection
 victoria and albert museum
 kröller-müller museum
 the met
@@ -6,3 +5,4 @@ burrell collection
 national gallery
 smk — national gallery of denmark
 rijksmuseum
+hermitage museum
