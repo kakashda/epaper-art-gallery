@@ -1,4 +1,3 @@
-burrell collection
 national gallery
 smk — national gallery of denmark
 rijksmuseum
@@ -6,3 +5,4 @@ hermitage museum
 van gogh museum
 victoria and albert museum
 royal collection
+musée toulouse-lautrec
