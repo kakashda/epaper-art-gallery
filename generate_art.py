@@ -187,7 +187,12 @@ def _request_with_retries(url, *, params=None, headers=None, label="request"):
 
 def fetch_json(url, params=None, label="json"):
     """Загружает и парсит JSON с повторами."""
-    response = _request_with_retries(url, params=params, headers=API_HEADERS, label=label)
+    headers = dict(API_HEADERS)
+    # Wikidata Query Service и Wikimedia API отклоняют обобщённый браузерный
+    # User-Agent (HTTP 403/429) — по политике им нужен ОПИСАТЕЛЬНЫЙ UA.
+    if any(h in url for h in ("wikidata.org", "wikimedia.org", "wikipedia.org")):
+        headers["User-Agent"] = WIKIMEDIA_UA
+    response = _request_with_retries(url, params=params, headers=headers, label=label)
     try:
         return response.json()
     except ValueError as error:
@@ -267,6 +272,15 @@ FAMOUS_ARTISTS = [
     "Henry Fuseli", "Gustave Dore", "John Martin", "Francisco Goya",
     "Peter von Cornelius", "Benjamin West", "Jean-Leon Gerome",
     "Ilya Repin", "Vasily Surikov", "Karl Bryullov", "Rembrandt van Rijn",
+    # СРЕДНЕВЕКОВЬЕ и РАННИЙ РЕНЕССАНС (XIII–XV вв.) — готика, треченто,
+    # византийская/русская иконопись, международная готика. Раньше отсекались,
+    # теперь показываем наравне с остальными.
+    "Giotto", "Duccio di Buoninsegna", "Cimabue", "Simone Martini",
+    "Pietro Lorenzetti", "Ambrogio Lorenzetti", "Fra Angelico", "Masaccio",
+    "Gentile da Fabriano", "Fra Filippo Lippi", "Piero della Francesca",
+    "Jan van Eyck", "Rogier van der Weyden", "Hans Memling", "Robert Campin",
+    "Andrei Rublev", "Theophanes the Greek", "Dionisius",
+    "Konrad Witz", "Stefan Lochner",
 ]
 
 # Wikidata QID знаменитых европейских мастеров. Через Wikidata мы получаем
@@ -312,6 +326,13 @@ ARTIST_QIDS = {
     "Q4768": "Karl Bryullov",           # "Последний день Помпеи", катастрофы
     "Q937096": "John Martin",           # апокалипсис, гибель городов, ад/рай
     "Q313498": "Benjamin West",         # исторические сражения, "Смерть Вольфа"
+    # СРЕДНЕВЕКОВЬЕ / РАННИЙ РЕНЕССАНС — готика, треченто, иконопись (QID проверены)
+    "Q15792": "Duccio di Buoninsegna",  # сиенская школа, ~1255–1319
+    "Q221043": "Simone Martini",        # международная готика, ~1284–1344
+    "Q15790": "Cimabue",                # флорентиец, ~1240–1302, учитель Джотто
+    "Q312393": "Gentile da Fabriano",   # международная готика, ~1370–1427
+    "Q838": "Andrei Rublev",            # русская иконопись, ~1360–1430
+    "Q319403": "Theophanes the Greek",  # византийско-русская иконопись, ~1340–1410
 }
 
 # Страны, музеи которых считаем «европейскими/евразийскими» (по названию из Wikidata).
@@ -340,6 +361,14 @@ FALLBACK_TERMS = [
     "allegory painting", "the last judgment painting",
     # Сюжеты из книг, истории, войн, городов
     "Dante Inferno painting", "siege city painting", "revolution painting",
+    # СРЕДНЕВЕКОВЬЕ и ДРЕВНОСТЬ (до 1400 г. и ранее, вплоть до античности):
+    # готика, треченто, иконопись, фрески, мозаики, манускрипты, романское и
+    # византийское искусство. Ловим в т.ч. АНОНИМНЫЕ работы (без известного автора).
+    "medieval painting", "gothic painting", "gothic altarpiece",
+    "byzantine icon", "orthodox icon", "tempera panel painting",
+    "illuminated manuscript", "medieval fresco", "romanesque fresco",
+    "roman fresco", "roman mosaic", "byzantine mosaic",
+    "trecento painting", "duecento painting", "book of hours",
 ]
 
 # Европейские отделы The Met — сильно повышают шанс попасть на «светил».
@@ -563,18 +592,19 @@ def smk_candidates():
 def vam_candidates():
     """Генератор кандидатов из Victoria and Albert Museum (Лондон, Великобритания).
 
-    Крупнейший европейский музей искусства и дизайна. Фильтруем строго до
-    масляной живописи (kw_object_type=Oil painting), чтобы не попадали
-    репродукции и печатная графика.
+    Крупнейший европейский музей искусства и дизайна. Фильтруем до ЖИВОПИСИ
+    в широком смысле (kw_object_type=Painting): помимо масла сюда попадают
+    темпера, панельная живопись, иконы, фрески и др. — важно, чтобы не терять
+    средневековые работы. Печатная графика и фото сюда не входят.
     """
     search_url = "https://api.vam.ac.uk/v2/objects/search"
-    # Перебираем нескольких мастеров, пока не найдём масляную живопись.
+    # Перебираем нескольких мастеров, пока не найдём живопись.
     queries = random.sample(FAMOUS_ARTISTS, min(EURO_QUERY_ATTEMPTS, len(FAMOUS_ARTISTS)))
     records = []
     for query in queries:
         params = {
             "q": query,
-            "kw_object_type": "Oil painting",
+            "kw_object_type": "Painting",
             "images_exist": 1,
             "page_size": 100,
             "page": 1,
@@ -588,7 +618,7 @@ def vam_candidates():
         if records:
             print(f"[vam] Запрос '{query}': найдено {len(records)} картин.")
             break
-        print(f"[vam] Поиск по '{query}' (Oil painting) ничего не вернул.")
+        print(f"[vam] Поиск по '{query}' (Painting) ничего не вернул.")
 
     if not records:
         return
@@ -697,7 +727,7 @@ def wikidata_candidates():
             "image_url": image_url,
             "title": _clean_meta(row.get("itemLabel", {}).get("value")) or "Untitled",
             "artist": ARTIST_QIDS.get(chosen_qid, "Unknown artist"),
-            "date": _clean_meta(row.get("inception", {}).get("value"))[:4],
+            "date": _format_year(row.get("inception", {}).get("value")),
             "medium": "oil painting",
             "culture": country,
             "source": source,
@@ -705,12 +735,147 @@ def wikidata_candidates():
         }
 
 
+# Типы произведений (P31), которые ПО СВОЕЙ ПРИРОДЕ старинные — Средневековье и
+# древность (вплоть до нулевого года и античности). Запрос по типу, а НЕ по
+# имени автора: это единственный способ показывать АНОНИМНЫЕ работы (иконы,
+# фрески, мозаики, алтари, манускрипты без известного мастера) и самые древние
+# произведения. Дорогой FILTER(YEAR(...)) не используем — он не укладывается в
+# таймаут WDQS; эти типы и так почти целиком относятся к древности/средневековью.
+# QID проверены:
+#   Q132137   — икона (byzantine/russian/orthodox icons, VI–XV вв. и позже)
+#   Q22669139 — фреска (roman/medieval frescoes)
+#   Q133067   — мозаика (roman/byzantine mosaics, античность и раннее Средневековье)
+#   Q15711026 — алтарный образ (gothic altarpieces)
+#   Q48498    — иллюминированный манускрипт (medieval manuscripts)
+ANCIENT_ART_TYPES = [
+    ("Q132137", "икона"),
+    ("Q22669139", "фреска"),
+    ("Q133067", "мозаика"),
+    ("Q15711026", "алтарный образ"),
+    ("Q48498", "иллюминированный манускрипт"),
+]
+
+
+def _is_anon_label(value):
+    """True, если метка автора пустая или это URL-заглушка (нет названия) →
+    считаем работу анонимной."""
+    if not value:
+        return True
+    return value.startswith("http://") or value.startswith("https://")
+
+
+def _format_year(value):
+    """Извлекает читаемый год из даты Wikidata (P571).
+
+    Примеры:
+      '1488-01-01T00:00:00Z'  -> '1488'
+      '0650-01-01T00:00:00Z'  -> '650'
+      '-0079-01-01T00:00:00Z' -> '79 BC'  (годы до н.э.)
+      ''                      -> ''
+    """
+    if not value:
+        return ""
+    value = str(value).strip()
+    bce = value.startswith("-")
+    if bce:
+        value = value[1:]
+    # Берём ведущие цифры (год) до первого '-' / 'T'.
+    match = re.match(r"(\d+)", value)
+    if not match:
+        return ""
+    year = str(int(match.group(1)))  # убираем ведущие нули: '0650' -> '650'
+    return f"{year} BC" if bce else year
+
+
+def wikidata_ancient_candidates():
+    """Старинное искусство по ТИПУ (включая АНОНИМНЫЕ работы), а не по автору.
+
+    Запрашивает у Wikidata произведения изначально старинных типов (иконы,
+    фрески, мозаики, алтари, манускрипты). Автор НЕ обязателен (P170 опционален),
+    поэтому сюда попадают безымянные средневековые и античные работы (вплоть до
+    нулевого года и ранее), которых не найти поиском по имени мастера.
+
+    Оставляет только работы в европейских/евразийских музеях. Изображения — с
+    Wikimedia Commons в высоком разрешении.
+    """
+    endpoint = "https://query.wikidata.org/sparql"
+    types = ANCIENT_ART_TYPES[:]
+    random.shuffle(types)
+
+    bindings = []
+    for qid, name in types[:EURO_QUERY_ATTEMPTS]:
+        sparql = (
+            "SELECT ?item ?itemLabel ?img ?inception ?creatorLabel ?collLabel "
+            "?countryLabel ?genreLabel WHERE { "
+            "?item wdt:P31 wd:%s; wdt:P18 ?img. "
+            "OPTIONAL { ?item wdt:P571 ?inception. } "
+            "OPTIONAL { ?item wdt:P170 ?creator. } "
+            "OPTIONAL { ?item wdt:P195 ?coll. OPTIONAL { ?coll wdt:P17 ?country. } } "
+            "OPTIONAL { ?item wdt:P136 ?genre. } "
+            'SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } '
+            "LIMIT 250" % qid
+        )
+        try:
+            data = fetch_json(endpoint, {"query": sparql, "format": "json"},
+                              f"wikidata-ancient-{qid}")
+        except Exception as error:
+            print(f"[wikidata-ancient] Тип {name} ({qid}) не удался: {error}")
+            continue
+        rows = data.get("results", {}).get("bindings", [])
+        # только работы в европейских/евразийских музеях
+        euro_rows = [
+            r for r in rows
+            if r.get("countryLabel", {}).get("value", "") in EUROPEAN_COUNTRIES
+        ]
+        if euro_rows:
+            bindings = euro_rows
+            print(f"[wikidata-ancient] {name}: {len(euro_rows)} работ в музеях "
+                  f"Европы (из {len(rows)} всего).")
+            break
+        print(f"[wikidata-ancient] {name}: нет работ в европейских музеях "
+              f"(всего {len(rows)}).")
+
+    if not bindings:
+        return
+
+    random.shuffle(bindings)
+    for row in bindings[:MAX_CANDIDATES]:
+        img = row.get("img", {}).get("value")
+        if not img:
+            continue
+        sep = "&" if "?" in img else "?"
+        image_url = f"{img}{sep}width=4000"
+
+        museum = _clean_meta(row.get("collLabel", {}).get("value"))
+        country = _clean_meta(row.get("countryLabel", {}).get("value"))
+        source = museum or "European museum (Wikidata)"
+        if museum and country:
+            source = f"{museum}, {country}"
+
+        # Автор часто отсутствует или без метки → анонимная работа.
+        raw_artist = row.get("creatorLabel", {}).get("value")
+        artist = "Unknown artist" if _is_anon_label(raw_artist) else _clean_meta(raw_artist)
+
+        yield {
+            "image_url": image_url,
+            "title": _clean_meta(row.get("itemLabel", {}).get("value")) or "Untitled",
+            "artist": artist or "Unknown artist",
+            "date": _format_year(row.get("inception", {}).get("value")),
+            "medium": "",
+            "culture": country,
+            "source": source,
+            "genre": _clean_meta(row.get("genreLabel", {}).get("value")),
+        }
+
+
 # Провайдеры разбиты по ГЕОГРАФИИ музея (а не по происхождению картины):
-#   • Европа/Евразия: Wikidata (музеи ВСЕЙ Европы), SMK (Дания), V&A (Британия)
+#   • Европа/Евразия: Wikidata (музеи ВСЕЙ Европы), SMK (Дания), V&A (Британия),
+#     wikidata_ancient (старинное искусство по эпохе, вкл. анонимное)
 #   • США: The Met (Нью-Йорк), Cleveland (Огайо)
 # Пользователь хочет соотношение ~9:1 в пользу европейских музеев/коллекций.
 # Wikidata стоит первым: покрывает Прадо, Лувр, Уффици, Вену, Мюнхен, Ватикан и т.д.
-EUROPEAN_PROVIDERS = [wikidata_candidates, smk_candidates, vam_candidates]
+EUROPEAN_PROVIDERS = [wikidata_candidates, wikidata_ancient_candidates,
+                      smk_candidates, vam_candidates]
 US_PROVIDERS = [met_candidates, cleveland_candidates]
 EUROPEAN_SHARE = 0.9  # доля показов из европейских музеев
 
@@ -765,9 +930,16 @@ def load_recent_artists():
 
 
 def save_recent_artist(artist):
-    """Добавляет автора в историю и подрезает её до ARTIST_HISTORY_SIZE."""
+    """Добавляет автора в историю и подрезает её до ARTIST_HISTORY_SIZE.
+
+    «Unknown artist» (анонимные средневековые/античные работы) в историю НЕ
+    записываем: иначе фильтр повторов заблокировал бы все последующие безымянные
+    работы, и иконы/фрески/мозаики/манускрипты перестали бы появляться."""
+    key = _artist_key(artist)
+    if not key or key == "unknown artist":
+        return
     history = load_recent_artists()
-    history.append(_artist_key(artist))
+    history.append(key)
     history = history[-ARTIST_HISTORY_SIZE:]
     try:
         Path(ARTIST_HISTORY_FILE).write_text("\n".join(history) + "\n", encoding="utf-8")
