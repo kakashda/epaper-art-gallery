@@ -1,4 +1,3 @@
-stichting nederlands kunstbezit
 kunsthistorisches museum
 basilica of saint augustine in campo marzio
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ sint-augustinuskerk
 dormition cathedral
 andrey rublev's museum
 british library
+musée d'orsay
