@@ -1,4 +1,3 @@
-royal library of belgium
 dôme de cividale del friuli
 gemäldegalerie berlin
 bavarian state library
@@ -6,3 +5,4 @@ national gallery
 british library
 église saint-nicolas de tavant
 victoria and albert museum
+doge's palace
