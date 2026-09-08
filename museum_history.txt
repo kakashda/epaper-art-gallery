@@ -1,4 +1,3 @@
-national pushkin museum
 basilica of san francesco d'assisi
 the met
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ national archaeological museum of tarragona
 cleveland museum of art
 victoria and albert museum
 dôme de cividale del friuli
+museo del prado
