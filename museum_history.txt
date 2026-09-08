@@ -1,4 +1,3 @@
-bavarian state library
 national gallery
 british library
 église saint-nicolas de tavant
@@ -6,3 +5,4 @@ victoria and albert museum
 doge's palace
 collection goudstikker heirs
 national pushkin museum
+basilica of san francesco d'assisi
