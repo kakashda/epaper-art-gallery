@@ -1,4 +1,3 @@
-museu d’història de manacor
 victoria and albert museum
 smk — national gallery of denmark
 rijksmuseum
@@ -6,3 +5,4 @@ the met
 municipal library trier
 royal library of belgium
 dôme de cividale del friuli
+gemäldegalerie berlin
