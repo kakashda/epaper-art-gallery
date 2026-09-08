@@ -1,4 +1,3 @@
-munich residence
 smk — national gallery of denmark
 galleria palatina
 museum of fine arts of lyon
@@ -6,3 +5,4 @@ cleveland museum of art
 van gogh museum
 musée des beaux-arts et d'archéologie de besançon
 tretyakov gallery
+the met
