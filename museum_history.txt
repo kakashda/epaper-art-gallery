@@ -1,4 +1,3 @@
-hermitage museum
 victoria and albert museum
 russian museum
 rijksmuseum
@@ -6,3 +5,4 @@ museo del prado
 galleria borghese
 musée des beaux-arts de bordeaux
 smk — national gallery of denmark
+national galleries scotland
