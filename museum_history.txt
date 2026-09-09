@@ -1,4 +1,3 @@
-basilica of san francesco d'assisi
 victoria and albert museum
 cleveland museum of art
 naples national archaeological museum
@@ -6,3 +5,4 @@ church of saints nazarius and celsus
 bavarian state painting collections
 the met
 condé museum
+amsterdam museum
