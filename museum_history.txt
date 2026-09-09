@@ -1,4 +1,3 @@
-musée saint-raymond
 belvedere
 musée des beaux-arts de bordeaux
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ hermitage museum
 preston park museum
 fitzwilliam museum
 victoria and albert museum
+saint michael's golden-domed monastery
