@@ -1,4 +1,3 @@
-the met
 condé museum
 amsterdam museum
 ca' pesaro
@@ -6,3 +5,4 @@ st bavo's cathedral
 victoria and albert museum
 smk — national gallery of denmark
 santa maria nova church
+national galleries scotland
