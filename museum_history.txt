@@ -1,4 +1,3 @@
-cenacolo di fuligno
 the met
 palace of fontainebleau
 tretyakov gallery
@@ -6,3 +5,4 @@ kunsthistorisches museum
 smk — national gallery of denmark
 basilica of san francesco d'assisi
 victoria and albert museum
+cleveland museum of art
