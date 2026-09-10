@@ -1,4 +1,3 @@
-cleveland museum of art
 smk — national gallery of denmark
 musée des beaux-arts de bordeaux
 harvard university center for italian renaissance studies
@@ -6,3 +5,4 @@ kizhi pogost
 national gallery
 finnish national gallery
 the met
+victoria and albert museum
