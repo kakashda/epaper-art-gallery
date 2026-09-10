@@ -1,4 +1,3 @@
-department of paintings of the louvre
 san mercuriale abbey
 tretyakov gallery
 collegio del cambio
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 lucerne central and university library
 vlaamse kunstcollectie
 british museum
+russian museum
