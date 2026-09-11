@@ -1,4 +1,3 @@
-british library
 victoria and albert museum
 department of paintings of the louvre
 ognissanti church
@@ -6,3 +5,4 @@ san francesco
 museu nacional d'art de catalunya
 smk — national gallery of denmark
 musée d'orsay
+rijksmuseum
