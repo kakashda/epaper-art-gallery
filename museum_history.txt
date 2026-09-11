@@ -1,4 +1,3 @@
-galleria borghese
 scrovegni chapel
 cotton library
 zentralbibliothek zürich
@@ -6,3 +5,4 @@ musée courbet
 dormition cathedral
 the lobkowicz collections
 cleveland museum of art
+musée des beaux-arts et d'archéologie de besançon
