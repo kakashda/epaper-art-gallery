@@ -1,4 +1,3 @@
-cotton library
 zentralbibliothek zürich
 musée courbet
 dormition cathedral
@@ -6,3 +5,4 @@ the lobkowicz collections
 cleveland museum of art
 musée des beaux-arts et d'archéologie de besançon
 department of paintings of the louvre
+victoria and albert museum
