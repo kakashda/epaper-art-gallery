@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 galleria borghese
 scrovegni chapel
 cotton library
@@ -6,3 +5,4 @@ zentralbibliothek zürich
 musée courbet
 dormition cathedral
 the lobkowicz collections
+cleveland museum of art
