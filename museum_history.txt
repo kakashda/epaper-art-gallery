@@ -1,4 +1,3 @@
-fitzwilliam museum
 arezzo cathedral
 cleveland museum of art
 british museum
@@ -6,3 +5,4 @@ department of paintings of the louvre
 the met
 tretyakov gallery
 department of greek
+museu nacional d'art de catalunya
