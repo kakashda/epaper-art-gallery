@@ -1,4 +1,3 @@
-cleveland museum of art
 uffizi gallery
 national gallery
 department of paintings of the louvre
@@ -6,3 +5,4 @@ kunsthaus zürich
 condé museum
 national museum of archaeology
 smk — national gallery of denmark
+victoria and albert museum
