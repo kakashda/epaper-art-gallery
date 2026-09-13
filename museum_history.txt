@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 heraklion archaeological museum
 florence cathedral
 mauritshuis
@@ -6,3 +5,4 @@ musée d'orsay
 bibliothèque municipale de dijon
 national galleries scotland
 british museum
+zentralbibliothek zürich
