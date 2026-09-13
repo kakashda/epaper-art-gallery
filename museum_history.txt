@@ -1,4 +1,3 @@
-russian museum
 condé museum
 kupferstichkabinett berlin
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ heraklion archaeological museum
 florence cathedral
 mauritshuis
 musée d'orsay
+bibliothèque municipale de dijon
