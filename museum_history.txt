@@ -1,4 +1,3 @@
-museu nacional d'art de catalunya
 basilica of santa maria novella
 amsterdam museum
 condé museum
@@ -6,3 +5,4 @@ tretyakov gallery
 museo dell'opera del duomo
 icon collection of sweden national museum
 victoria and albert museum
+smk — national gallery of denmark
