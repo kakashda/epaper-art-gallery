@@ -1,4 +1,3 @@
-icon collection of sweden national museum
 museum of islamic art
 the met
 cleveland museum of art
@@ -6,3 +5,4 @@ victoria and albert museum
 smk — national gallery of denmark
 naples national archaeological museum
 nationalmuseum
+musée saint-raymond
