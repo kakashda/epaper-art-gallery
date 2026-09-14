@@ -1,4 +1,3 @@
-cleveland museum of art
 victoria and albert museum
 smk — national gallery of denmark
 naples national archaeological museum
@@ -6,3 +5,4 @@ nationalmuseum
 musée saint-raymond
 bavarian national museum
 archaeological museum of dion
+department of paintings of the louvre
