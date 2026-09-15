@@ -1,4 +1,3 @@
-scrovegni chapel
 museum boijmans van beuningen
 gallerie dell'accademia
 charles sedelmeyer collection
@@ -6,3 +5,4 @@ tolga monastery
 the met
 victoria and albert museum
 museo del prado
+smk — national gallery of denmark
