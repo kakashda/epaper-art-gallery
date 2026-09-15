@@ -1,4 +1,3 @@
-rijksmuseum
 national museum of archaeology
 museum of san marco
 musée d'orsay
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 russian museum
 museo del prado
 victoria and albert museum
+bibliothèque nationale de france
