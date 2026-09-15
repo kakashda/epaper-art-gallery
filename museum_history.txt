@@ -1,4 +1,3 @@
-museo del prado
 victoria and albert museum
 bibliothèque nationale de france
 worshipful company of barbers
@@ -6,3 +5,4 @@ bibliotheca publica latina
 statens museum for kunst
 cini palace gallery
 pinacoteca vaticana
+museum of fine arts of lyon
