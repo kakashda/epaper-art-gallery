@@ -1,4 +1,3 @@
-russian museum
 burrell collection
 batthyaneum library
 department of paintings of the louvre
@@ -6,3 +5,4 @@ british museum
 verona cathedral
 sistine chapel
 galleria nazionale d'arte antica
+kunstmuseum basel
