@@ -1,4 +1,3 @@
-musée d'orsay
 musées nationaux récupération
 vladimir-suzdal museum-reserve
 vatican museums
@@ -6,3 +5,4 @@ unterlinden museum
 gemäldegalerie berlin
 pushkin museum of fine arts
 national museum of archaeology
+foundation e.g. bührle collection
