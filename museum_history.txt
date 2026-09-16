@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 samara art museum
 musée des beaux-arts de bordeaux
 gemäldegalerie berlin
@@ -6,3 +5,4 @@ uffizi gallery
 naples national archaeological museum
 national galleries scotland
 glynn vivian art gallery
+church of san niccolò oltrarno
