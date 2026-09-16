@@ -1,4 +1,3 @@
-national galleries scotland
 glynn vivian art gallery
 church of san niccolò oltrarno
 victoria and albert museum
@@ -6,3 +5,4 @@ cleveland museum of art
 smk — national gallery of denmark
 staatliche kunsthalle karlsruhe
 department of paintings of the louvre
+the met
