@@ -1,4 +1,3 @@
-cini palace gallery
 pinacoteca vaticana
 museum of fine arts of lyon
 tretyakov gallery
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 victoria and albert museum
 ivanovo regional art museum
 musée des beaux-arts de rouen
+pinacoteca nazionale
