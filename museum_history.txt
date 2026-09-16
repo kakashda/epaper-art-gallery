@@ -1,4 +1,3 @@
-worshipful company of barbers
 bibliotheca publica latina
 statens museum for kunst
 cini palace gallery
@@ -6,3 +5,4 @@ pinacoteca vaticana
 museum of fine arts of lyon
 tretyakov gallery
 smk — national gallery of denmark
+victoria and albert museum
