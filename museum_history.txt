@@ -1,4 +1,3 @@
-victoria and albert museum
 royal collection
 naples national archaeological museum
 austrian national library
@@ -6,3 +5,4 @@ hildesheim cathedral library
 icon collection of sweden national museum
 smk — national gallery of denmark
 kröller-müller museum
+department of paintings of the louvre
