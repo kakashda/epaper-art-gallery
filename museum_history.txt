@@ -1,4 +1,3 @@
-borghese collection
 historical museum frankfurt
 vatican museums
 wallraf–richartz museum
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 basilica of saint augustine in campo marzio
 victoria and albert museum
 basilica of our lady of the pillar
+naples national archaeological museum
