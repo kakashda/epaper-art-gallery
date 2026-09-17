@@ -1,4 +1,3 @@
-department of paintings of the louvre
 annonciade museum
 strasbourg museum of modern and contemporary art
 lindenau museum
@@ -6,3 +5,4 @@ vlaamse kunstcollectie
 naples national archaeological museum
 victoria and albert museum
 the met
+smk — national gallery of denmark
