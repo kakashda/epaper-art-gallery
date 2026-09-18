@@ -1,4 +1,3 @@
-uffizi gallery
 museo del prado
 fitzwilliam museum
 st. peter’s church
@@ -6,3 +5,4 @@ museo agostino pepoli
 tate
 victoria and albert museum
 dormition cathedral
+the met
