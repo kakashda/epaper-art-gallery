@@ -1,4 +1,3 @@
-róth museum
 department of paintings of the louvre
 cerkiew przemienienia pańskiego w lublinie
 the met
@@ -6,3 +5,4 @@ arnamagnæan manuscript collection
 victoria and albert museum
 cleveland museum of art
 smk — national gallery of denmark
+uffizi gallery
