@@ -1,4 +1,3 @@
-royal collection
 tate
 musée d'orsay
 kunsthistorisches museum
@@ -6,3 +5,4 @@ london museum
 victoria and albert museum
 smk — national gallery of denmark
 collegio del cambio
+hermitage museum
