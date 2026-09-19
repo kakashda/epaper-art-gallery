@@ -1,4 +1,3 @@
-laing art gallery
 nationalmuseum
 foundation e.g. bührle collection
 national gallery
@@ -6,3 +5,4 @@ archaeological museum of delos
 royal museums of fine arts of belgium
 national museum in warsaw
 smk — national gallery of denmark
+victoria and albert museum
