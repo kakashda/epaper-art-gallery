@@ -1,4 +1,3 @@
-kunsthistorisches museum
 london museum
 victoria and albert museum
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ collegio del cambio
 hermitage museum
 parma cathedral
 cleveland museum of art
+st. john's co-cathedral
