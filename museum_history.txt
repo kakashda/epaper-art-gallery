@@ -1,4 +1,3 @@
-león cathedral
 laing art gallery
 the met
 saint nicholas orthodox church
@@ -6,3 +5,4 @@ basilica of san francesco d'assisi
 national gallery
 cleveland museum of art
 courtauld institute of art
+victoria and albert museum
