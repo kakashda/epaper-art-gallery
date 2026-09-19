@@ -1,4 +1,3 @@
-collegio del cambio
 hermitage museum
 parma cathedral
 cleveland museum of art
@@ -6,3 +5,4 @@ st. john's co-cathedral
 musée de die
 finnish national gallery
 the met
+national gallery of umbria
