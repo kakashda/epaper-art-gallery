@@ -1,4 +1,3 @@
-st. peter's basilica
 smk — national gallery of denmark
 museo dell'opera metropolitana del duomo
 monastero di santa croce
@@ -6,3 +5,4 @@ bibliothèque nationale de france
 department of paintings of the louvre
 royal collection
 cleveland museum of art
+victoria and albert museum
