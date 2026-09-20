@@ -1,4 +1,3 @@
-musée de die
 finnish national gallery
 the met
 national gallery of umbria
@@ -6,3 +5,4 @@ british museum
 sant'apollonia
 museo del prado
 alcázar de los reyes cristianos
+ny carlsberg glyptotek
