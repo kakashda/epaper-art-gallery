@@ -1,4 +1,3 @@
-vologda museum-preserve
 cleveland museum of art
 nationalmuseum
 national trust
@@ -6,3 +5,4 @@ victoria and albert museum
 the met
 russian museum
 university of bologna
+smk — national gallery of denmark
