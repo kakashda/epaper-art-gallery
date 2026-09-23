@@ -1,4 +1,3 @@
-national galleries scotland
 basilica of san francesco d'assisi
 national gallery prague
 bibliothèque nationale de france
@@ -6,3 +5,4 @@ novgorod state integrated museum reserve
 hermitage museum
 fries museum
 national gallery
+smk — national gallery of denmark
