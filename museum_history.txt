@@ -1,4 +1,3 @@
-british museum
 pinacoteca e museo civico di volterra
 archaeological museum of delos
 icon collection of sweden national museum
@@ -6,3 +5,4 @@ british library
 van gogh museum
 smk — national gallery of denmark
 collection adriaan van der hoop
+zentralbibliothek zürich
