@@ -1,4 +1,3 @@
-collection adriaan van der hoop
 zentralbibliothek zürich
 bavarian state library
 victoria and albert museum
@@ -6,3 +5,4 @@ ognissanti church
 musée d'orsay
 hermitage museum
 municipal library trier
+smk — national gallery of denmark
