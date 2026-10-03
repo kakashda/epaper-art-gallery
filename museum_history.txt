@@ -1,4 +1,3 @@
-collection goudstikker heirs
 dome of castlefranco veneto
 nationalmuseum
 st. peter's basilica
@@ -6,3 +5,4 @@ ysbyty gwynedd
 dormition cathedral
 naples national archaeological museum
 instituut collectie nederland
+pskovo-pechersky dormition monastery
