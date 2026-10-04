@@ -1,4 +1,3 @@
-ysbyty gwynedd
 dormition cathedral
 naples national archaeological museum
 instituut collectie nederland
@@ -6,3 +5,4 @@ pskovo-pechersky dormition monastery
 smk — national gallery of denmark
 department of paintings of the louvre
 department of egyptian antiquities of the louvre
+museo di capodimonte
