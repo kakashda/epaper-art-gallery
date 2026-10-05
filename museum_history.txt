@@ -1,4 +1,3 @@
-pskovo-pechersky dormition monastery
 smk — national gallery of denmark
 department of paintings of the louvre
 department of egyptian antiquities of the louvre
@@ -6,3 +5,4 @@ museo di capodimonte
 victoria and albert museum
 stadtkirche wittenberg
 condé museum
+leicester museum & art gallery
