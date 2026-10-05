@@ -1,4 +1,3 @@
-department of paintings of the louvre
 department of egyptian antiquities of the louvre
 museo di capodimonte
 victoria and albert museum
@@ -6,3 +5,4 @@ stadtkirche wittenberg
 condé museum
 leicester museum & art gallery
 gallerie dell'accademia
+cleveland museum of art
