@@ -1,4 +1,3 @@
-cleveland museum of art
 smk — national gallery of denmark
 tretyakov gallery
 amsterdam museum
@@ -6,3 +5,4 @@ kunsthaus zürich
 russian museum
 museo dell'opera metropolitana del duomo
 barcelona city council
+sant'apollonia
