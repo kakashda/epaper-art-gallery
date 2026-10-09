@@ -1,4 +1,3 @@
-sant'apollonia
 department of paintings of the louvre
 victoria and albert museum
 ashmolean museum
@@ -6,3 +5,4 @@ smk — national gallery of denmark
 musée des beaux-arts de strasbourg
 tretyakov gallery
 rijksmuseum
+tolga monastery
