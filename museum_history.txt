@@ -1,4 +1,3 @@
-ashmolean museum
 smk — national gallery of denmark
 musée des beaux-arts de strasbourg
 tretyakov gallery
@@ -6,3 +5,4 @@ rijksmuseum
 tolga monastery
 palazzo vecchio
 royal collection
+scrovegni chapel
