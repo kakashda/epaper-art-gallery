@@ -1,4 +1,3 @@
-national galleries scotland
 tretyakov gallery
 austrian theatre museum
 bavarian state painting collections
@@ -6,3 +5,4 @@ göttingen state and university library
 victoria and albert museum
 gemäldegalerie berlin
 smk — national gallery of denmark
+palazzo chiericati art gallery
