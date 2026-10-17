@@ -1,4 +1,3 @@
-göttingen state and university library
 victoria and albert museum
 gemäldegalerie berlin
 smk — national gallery of denmark
@@ -6,3 +5,4 @@ palazzo chiericati art gallery
 musée des beaux-arts et d'archéologie de besançon
 san francesco
 department of paintings of the louvre
+kb
