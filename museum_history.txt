@@ -1,4 +1,3 @@
-department of paintings of the louvre
 kb
 museum of fine arts of lyon
 cleveland museum of art
@@ -6,3 +5,4 @@ contarelli chapel
 chiesa dell'annunziata
 victoria and albert museum
 kunsthaus zürich
+valaam monastery
