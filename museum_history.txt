@@ -1,4 +1,3 @@
-kb
 museum of fine arts of lyon
 cleveland museum of art
 contarelli chapel
@@ -6,3 +5,4 @@ chiesa dell'annunziata
 victoria and albert museum
 kunsthaus zürich
 valaam monastery
+smk — national gallery of denmark
