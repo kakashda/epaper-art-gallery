@@ -1,4 +1,3 @@
-palazzo vecchio
 museum of san marco
 smk — national gallery of denmark
 scrovegni chapel
@@ -6,3 +5,4 @@ tretyakov gallery
 tolga monastery
 unterlinden museum
 berlin state library
+church of st. andrew in san donnino
