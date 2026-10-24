@@ -1,4 +1,3 @@
-british museum
 demidov collection
 aachen cathedral treasury
 victoria and albert museum
@@ -6,3 +5,4 @@ jacques goudstikker collection
 bibliothèque nationale de france
 musée des augustins
 kunsthistorisches museum
+smk — national gallery of denmark
