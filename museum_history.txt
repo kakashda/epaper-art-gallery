@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 zentralbibliothek zürich
 novgorod state integrated museum reserve
 museo del prado
@@ -6,3 +5,4 @@ benaki museum
 scrovegni chapel
 museo nazionale romano
 victoria and albert museum
+vatican museums
