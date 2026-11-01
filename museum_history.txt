@@ -1,4 +1,3 @@
-museum boijmans van beuningen
 smk — national gallery of denmark
 saint sophia cathedral
 uffizi gallery
@@ -6,3 +5,4 @@ department of paintings of the louvre
 royal chapel of st. anthony of la florida
 harley manuscripts
 hamburger kunsthalle
+cleveland museum of art
