@@ -1,4 +1,3 @@
-cleveland museum of art
 stoclet palace
 foundation e.g. bührle collection
 russian museum
@@ -6,3 +5,4 @@ tretyakov gallery
 kunsthistorisches museum
 smk — national gallery of denmark
 victoria and albert museum
+kunstmuseum basel
