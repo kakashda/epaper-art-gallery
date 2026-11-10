@@ -1,4 +1,3 @@
-pinacoteca del castello sforzesco
 tretyakov gallery
 cleveland museum of art
 basilica of san francesco d'assisi
@@ -6,3 +5,4 @@ national gallery
 british library
 victoria and albert museum
 smk — national gallery of denmark
+vatican museums
