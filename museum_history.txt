@@ -1,4 +1,3 @@
-municipal library trier
 cleveland museum of art
 british library
 department of paintings of the louvre
@@ -6,3 +5,4 @@ cerkiew przemienienia pańskiego w lublinie
 national museum of archaeology
 victoria and albert museum
 smk — national gallery of denmark
+national gallery
