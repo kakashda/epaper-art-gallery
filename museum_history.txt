@@ -1,4 +1,3 @@
-smk — national gallery of denmark
 national gallery
 scottish national gallery
 musée d'orsay
@@ -6,3 +5,4 @@ scrovegni chapel
 naples national archaeological museum
 cultural heritage agency of the netherlands art collection
 bavarian state painting collections
+uffizi gallery
