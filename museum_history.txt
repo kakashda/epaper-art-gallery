@@ -1,4 +1,3 @@
-musée d'orsay
 scrovegni chapel
 naples national archaeological museum
 cultural heritage agency of the netherlands art collection
@@ -6,3 +5,4 @@ bavarian state painting collections
 uffizi gallery
 smk — national gallery of denmark
 national museum of archaeology
+laing art gallery
