@@ -1,4 +1,3 @@
-vlaamse kunstcollectie
 bibliothèque nationale de france
 cleveland museum of art
 staatsgalerie stuttgart
@@ -6,3 +5,4 @@ victoria and albert museum
 santa maria della pace
 icon collection of sweden national museum
 fitzwilliam museum
+vatican museums
