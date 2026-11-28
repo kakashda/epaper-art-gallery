@@ -1,4 +1,3 @@
-pinacoteca nazionale
 musée gallo-romain de saint-romain-en-gal
 victoria and albert museum
 tretyakov gallery
@@ -6,3 +5,4 @@ musée d'orsay
 hermitage museum
 smk — national gallery of denmark
 saint nicholas orthodox church
+british library
